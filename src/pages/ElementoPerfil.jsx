@@ -2,18 +2,18 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
-import { marcarDocumentacion } from "../lib/clientes";
+import { marcarDocumentacion } from "../lib/elementos";
 import {
-  listenPedidosDeCliente,
+  listenPedidosDeElemento,
   crearPedido,
   marcarEntregado,
 } from "../lib/pedidos";
 import { listenCatalogo, TALLA_TIPO } from "../lib/catalogo";
 import PedidoCard from "../components/PedidoCard";
 
-export default function ClientePerfil() {
-  const { clienteId } = useParams();
-  const [cliente, setCliente] = useState(null);
+export default function ElementoPerfil() {
+  const { elementoId } = useParams();
+  const [elemento, setElemento] = useState(null);
   const [pedidos, setPedidos] = useState([]);
   const [catalogo, setCatalogo] = useState([]);
   const [productoId, setProductoId] = useState("");
@@ -22,13 +22,13 @@ export default function ClientePerfil() {
   const [precioManual, setPrecioManual] = useState("");
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "clientes", clienteId), (snap) => {
-      setCliente(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+    const unsub = onSnapshot(doc(db, "elementos", elementoId), (snap) => {
+      setElemento(snap.exists() ? { id: snap.id, ...snap.data() } : null);
     });
     return unsub;
-  }, [clienteId]);
+  }, [elementoId]);
 
-  useEffect(() => listenPedidosDeCliente(clienteId, setPedidos), [clienteId]);
+  useEffect(() => listenPedidosDeElemento(elementoId, setPedidos), [elementoId]);
   useEffect(() => listenCatalogo(setCatalogo), []);
 
   const producto = catalogo.find((p) => p.id === productoId);
@@ -51,7 +51,7 @@ export default function ClientePerfil() {
     if (color) partes.push(color);
     if (talla) partes.push(`talla ${talla}`);
 
-    await crearPedido(clienteId, {
+    await crearPedido(elementoId, {
       articulo: partes.join(" — "),
       precioTotal: precioManual,
     });
@@ -62,19 +62,43 @@ export default function ClientePerfil() {
     setPrecioManual("");
   }
 
-  if (!cliente) return <p className="page">Cargando...</p>;
+  if (!elemento) return <p className="page">Cargando...</p>;
+
+  const datos = [
+    ["Unidad", elemento.unidad],
+    ["Edad", elemento.edad],
+    ["Fecha de nacimiento", elemento.fechaNacimiento],
+    ["Teléfono(s)", elemento.telefonos?.join(", ")],
+    ["Dirección", elemento.direccion],
+    ["Escuela", elemento.escuela],
+    ["Turno", elemento.turno],
+    ["Grado escolar", elemento.gradoEscolar],
+    ["Padre/Madre/Tutor", elemento.tutor],
+    ["Cómo se enteró", elemento.comoSeEntero],
+    ["Seguro social / servicio médico", elemento.seguroSocial],
+    ["Alergias / padecimientos", elemento.alergias],
+    ["Paga mensualidad", elemento.pagaMensualidad ? "Sí" : "No"],
+  ];
 
   return (
     <div className="page">
-      <Link to="/clientes">← Volver</Link>
-      <h1>{cliente.nombre}</h1>
-      <p>Edad: {cliente.edad || "—"} · Tel: {cliente.telefono || "—"}</p>
+      <Link to="/elementos" className="volver">← Volver</Link>
+      <h1>{elemento.nombre}</h1>
+
+      <div className="card ficha">
+        {datos.map(([etiqueta, valor]) => (
+          <div className="ficha-fila" key={etiqueta}>
+            <span className="ficha-etiqueta">{etiqueta}</span>
+            <span className="ficha-valor">{valor || "—"}</span>
+          </div>
+        ))}
+      </div>
 
       <label className="checkbox">
         <input
           type="checkbox"
-          checked={!!cliente.documentacionEntregada}
-          onChange={(e) => marcarDocumentacion(clienteId, e.target.checked)}
+          checked={!!elemento.documentacionEntregada}
+          onChange={(e) => marcarDocumentacion(elementoId, e.target.checked)}
         />
         Documentación entregada (acta, CURP, etc. vía Google Form)
       </label>
@@ -130,7 +154,7 @@ export default function ClientePerfil() {
           />
         )}
 
-        <button type="submit" disabled={!producto}>
+        <button type="submit" className="btn-primary" disabled={!producto}>
           Agregar pedido
         </button>
       </form>
@@ -140,10 +164,10 @@ export default function ClientePerfil() {
       {pedidos.map((p) => (
         <PedidoCard
           key={p.id}
-          cliente={cliente}
+          cliente={elemento}
           pedido={p}
           onEntregar={(entregado) =>
-            marcarEntregado(clienteId, p.id, entregado)
+            marcarEntregado(elementoId, p.id, entregado)
           }
         />
       ))}

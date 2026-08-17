@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listenClientes } from "../lib/clientes";
+import { listenElementos } from "../lib/elementos";
 import { listenAsistenciaDia, marcarAsistencia } from "../lib/asistencia";
 
 function hoy() {
@@ -7,11 +7,11 @@ function hoy() {
 }
 
 export default function Asistencia() {
-  const [clientes, setClientes] = useState([]);
+  const [elementos, setElementos] = useState([]);
   const [fecha, setFecha] = useState(hoy());
   const [asistencia, setAsistencia] = useState({});
 
-  useEffect(() => listenClientes(setClientes), []);
+  useEffect(() => listenElementos(setElementos), []);
   useEffect(() => listenAsistenciaDia(fecha, setAsistencia), [fecha]);
 
   return (
@@ -24,15 +24,15 @@ export default function Asistencia() {
       />
 
       <ul className="lista">
-        {clientes.map((c) => (
-          <li key={c.id} className="asistencia-row">
-            <span>{c.nombre}</span>
+        {elementos.map((el) => (
+          <li key={el.id} className="asistencia-row">
+            <span>{el.nombre}</span>
             <label className="checkbox">
               <input
                 type="checkbox"
-                checked={!!asistencia[c.id]}
+                checked={!!asistencia[el.id]}
                 onChange={(e) =>
-                  marcarAsistencia(fecha, c.id, e.target.checked)
+                  marcarAsistencia(fecha, el.id, e.target.checked)
                 }
               />
               Presente

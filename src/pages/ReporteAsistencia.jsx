@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listenClientes } from "../lib/clientes";
+import { listenElementos } from "../lib/elementos";
 import { obtenerAsistenciasMes } from "../lib/asistencia";
 
 function mesActual() {
@@ -7,12 +7,12 @@ function mesActual() {
 }
 
 export default function ReporteAsistencia() {
-  const [clientes, setClientes] = useState([]);
+  const [elementos, setElementos] = useState([]);
   const [mes, setMes] = useState(mesActual());
   const [datos, setDatos] = useState(null);
   const [cargando, setCargando] = useState(false);
 
-  useEffect(() => listenClientes(setClientes), []);
+  useEffect(() => listenElementos(setElementos), []);
 
   async function generar() {
     setCargando(true);
@@ -27,7 +27,7 @@ export default function ReporteAsistencia() {
     <div className="page">
       <h1>Reporte mensual de asistencia</h1>
       <input type="month" value={mes} onChange={(e) => setMes(e.target.value)} />
-      <button onClick={generar} disabled={cargando}>
+      <button className="btn-primary" onClick={generar} disabled={cargando}>
         {cargando ? "Generando..." : "Generar lista"}
       </button>
 
@@ -36,18 +36,18 @@ export default function ReporteAsistencia() {
           <table>
             <thead>
               <tr>
-                <th>Cliente</th>
+                <th>Elemento</th>
                 {dias.map((d) => (
                   <th key={d}>{d.slice(8)}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {clientes.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.nombre}</td>
+              {elementos.map((el) => (
+                <tr key={el.id}>
+                  <td>{el.nombre}</td>
                   {dias.map((d) => (
-                    <td key={d}>{datos[d][c.id] ? "✓" : ""}</td>
+                    <td key={d}>{datos[d][el.id] ? "✓" : ""}</td>
                   ))}
                 </tr>
               ))}

@@ -19,14 +19,14 @@ export default function RelacionPagos() {
     async function enriquecer() {
       const resultado = await Promise.all(
         abonos.map(async (a) => {
-          const [clienteSnap, pedidoSnap] = await Promise.all([
-            getDoc(doc(db, "clientes", a.clienteId)),
-            getDoc(doc(db, "clientes", a.clienteId, "pedidos", a.pedidoId)),
+          const [elementoSnap, pedidoSnap] = await Promise.all([
+            getDoc(doc(db, "elementos", a.elementoId)),
+            getDoc(doc(db, "elementos", a.elementoId, "pedidos", a.pedidoId)),
           ]);
           return {
             ...a,
-            clienteNombre: clienteSnap.exists()
-              ? clienteSnap.data().nombre
+            elementoNombre: elementoSnap.exists()
+              ? elementoSnap.data().nombre
               : "?",
             articulo: pedidoSnap.exists() ? pedidoSnap.data().articulo : "?",
             liquidado: pedidoSnap.exists()
@@ -62,7 +62,7 @@ export default function RelacionPagos() {
       <ul className="lista">
         {filas.map((f) => (
           <li key={f.id}>
-            <strong>{f.clienteNombre}</strong> — {f.articulo} ${f.monto} (
+            <strong>{f.elementoNombre}</strong> — {f.articulo} ${f.monto} (
             {f.fechaLocal}) {f.liquidado ? "Liquidado" : "Abono"}
           </li>
         ))}

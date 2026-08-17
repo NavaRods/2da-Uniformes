@@ -17,13 +17,13 @@ export function listenAsistenciaDia(fecha, callback) {
   });
 }
 
-export async function marcarAsistencia(fecha, clienteId, presente) {
+export async function marcarAsistencia(fecha, elementoId, presente) {
   const ref = doc(db, "asistencias", fecha);
-  await setDoc(ref, { [clienteId]: presente }, { merge: true });
+  await setDoc(ref, { [elementoId]: presente }, { merge: true });
 }
 
 // Lista de asistencia de un mes completo (yyyy-mm), generada a demanda.
-// Devuelve { "2026-08-01": { clienteId: true, ... }, ... }
+// Devuelve { "2026-08-01": { elementoId: true, ... }, ... }
 export async function obtenerAsistenciasMes(yyyyMm) {
   const ref = collection(db, "asistencias");
   const q = query(

@@ -1,67 +1,233 @@
+:root {
+  --bg: #f4f5f7;
+  --bg-elevated: #ffffff;
+  --bg-nav: #1e2a3a;
+  --text: #1a1d23;
+  --text-muted: #6b7280;
+  --border: #e2e4e9;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-contrast: #ffffff;
+  --danger: #dc2626;
+  --success: #16a34a;
+  --tag-bg: #eef2ff;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --radius: 10px;
+}
+
+[data-theme="dark"] {
+  --bg: #12151c;
+  --bg-elevated: #1c212b;
+  --bg-nav: #0d1117;
+  --text: #e6e8eb;
+  --text-muted: #9aa1ac;
+  --border: #2a3140;
+  --primary: #3b82f6;
+  --primary-hover: #60a5fa;
+  --primary-contrast: #0d1117;
+  --danger: #f87171;
+  --success: #4ade80;
+  --tag-bg: #1e2938;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
-  background: #f5f5f5;
-  color: #222;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
+/* --- Navegación --- */
 .nav {
   display: flex;
-  gap: 12px;
+  gap: 4px;
   flex-wrap: wrap;
   align-items: center;
-  padding: 12px 16px;
-  background: #1e293b;
+  padding: 10px 16px;
+  background: var(--bg-nav);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .nav a,
-.nav button {
-  color: white;
+.nav-btn {
+  color: #cbd5e1;
   text-decoration: none;
   font-size: 14px;
   background: none;
   border: none;
   cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
+.nav a:hover,
+.nav a.activo,
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.nav-spacer {
+  flex: 1;
+}
+
+.nav-salir {
+  color: #f87171;
+  font-size: 13px;
+}
+
+.theme-toggle {
+  font-size: 18px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* --- Layout general --- */
 .page {
-  padding: 16px;
-  max-width: 720px;
+  padding: 20px 16px 48px;
+  max-width: 760px;
   margin: 0 auto;
 }
 
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+h1 {
+  font-size: 22px;
+  margin: 8px 0 16px;
+}
+
+h2 {
+  font-size: 16px;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+
+/* --- Tarjetas / formularios --- */
 .card {
-  background: white;
-  border-radius: 8px;
-  padding: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
   margin: 16px 0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+
+.form-grid > h2 {
+  grid-column: 1 / -1;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.campo-ancho {
+  grid-column: 1 / -1;
+}
+
+.campo label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+@media (max-width: 560px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 input,
-button {
-  padding: 10px;
-  font-size: 16px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
+select,
+textarea {
+  padding: 10px 12px;
+  font-size: 15px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  width: 100%;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 button {
-  background: #2563eb;
-  color: white;
+  padding: 10px 16px;
+  font-size: 15px;
+  border-radius: 8px;
   border: none;
   cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-contrast);
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background: var(--bg);
+}
+
+.btn-small {
+  padding: 6px 10px;
+  font-size: 13px;
+  align-self: flex-start;
 }
 
 button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .buscador {
@@ -69,16 +235,45 @@ button:disabled {
   margin: 12px 0;
 }
 
+/* --- Listas --- */
 .lista {
   list-style: none;
   padding: 0;
+  margin: 0;
 }
 
 .lista li {
-  background: white;
-  padding: 12px;
-  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.lista li a,
+.fila-lista {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.fila-lista:hover {
+  background: var(--bg);
+}
+
+.etiquetas {
+  display: flex;
+  gap: 6px;
+}
+
+.tag {
+  background: var(--tag-bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
 }
 
 .checkbox {
@@ -96,26 +291,31 @@ button:disabled {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .asistencia-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 12px 16px;
 }
 
+/* --- Tablas / reportes --- */
 .tabla-scroll {
   overflow-x: auto;
+  margin-top: 12px;
 }
 
 table {
   border-collapse: collapse;
   width: 100%;
+  background: var(--bg-elevated);
 }
 
 th,
 td {
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   padding: 6px 8px;
   text-align: center;
   font-size: 13px;
@@ -126,11 +326,52 @@ td {
   font-size: 18px;
 }
 
+/* --- Ficha de elemento --- */
+.ficha {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+}
+
+@media (max-width: 560px) {
+  .ficha {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ficha-fila {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ficha-etiqueta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ficha-valor {
+  font-size: 15px;
+}
+
+.volver {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+/* --- Login --- */
 .login-screen {
-  padding: 40px 16px;
+  padding: 60px 16px;
   text-align: center;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.login-screen h1 {
+  font-size: 24px;
 }
 
 .error {
-  color: #dc2626;
+  color: var(--danger);
 }

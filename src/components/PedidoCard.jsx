@@ -3,32 +3,32 @@ import { listenAbonosDePedido, registrarAbono } from "../lib/pedidos";
 import { linkWhatsapp, mensajeComprobante } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
 
-export default function PedidoCard({ cliente, pedido, onEntregar }) {
+export default function PedidoCard({ cliente: elemento, pedido, onEntregar }) {
   const { user } = useAuth();
   const [abonos, setAbonos] = useState([]);
   const [monto, setMonto] = useState("");
 
   useEffect(
-    () => listenAbonosDePedido(cliente.id, pedido.id, setAbonos),
-    [cliente.id, pedido.id]
+    () => listenAbonosDePedido(elemento.id, pedido.id, setAbonos),
+    [elemento.id, pedido.id]
   );
 
   async function onAbonar(e) {
     e.preventDefault();
     if (!monto) return;
-    await registrarAbono(cliente.id, pedido.id, {
+    await registrarAbono(elemento.id, pedido.id, {
       monto,
       quienRecibio: user?.displayName || user?.email,
     });
 
     const saldoPendiente = pedido.saldoPendiente - Number(monto);
     const mensaje = mensajeComprobante({
-      nombre: cliente.nombre,
+      nombre: elemento.nombre,
       articulo: pedido.articulo,
       monto,
       saldoPendiente,
     });
-    window.open(linkWhatsapp(cliente.telefono, mensaje), "_blank");
+    window.open(linkWhatsapp(elemento.telefonos?.[0], mensaje), "_blank");
 
     setMonto("");
   }
@@ -60,7 +60,9 @@ export default function PedidoCard({ cliente, pedido, onEntregar }) {
             value={monto}
             onChange={(e) => setMonto(e.target.value)}
           />
-          <button type="submit">Registrar pago y avisar por WhatsApp</button>
+          <button type="submit" className="btn-primary">
+            Registrar pago y avisar por WhatsApp
+          </button>
         </form>
       )}
 
