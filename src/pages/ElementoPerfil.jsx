@@ -66,6 +66,7 @@ export default function ElementoPerfil() {
 
   const datos = [
     ["Unidad", elemento.unidad],
+    ["Grupo", elemento.grupo],
     ["Edad", elemento.edad],
     ["Fecha de nacimiento", elemento.fechaNacimiento],
     ["Teléfono(s)", elemento.telefonos?.join(", ")],
@@ -134,17 +135,13 @@ export default function ElementoPerfil() {
         <h2>Nuevo pedido</h2>
         <select value={productoId} onChange={(e) => onSeleccionarProducto(e.target.value)}>
           <option value="">Selecciona un producto...</option>
-          {["Varonil", "Femenino", "Ambos"].map((grupo) => (
-            <optgroup key={grupo} label={grupo}>
-              {catalogo
-                .filter((p) => p.grupo === grupo)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre} — ${p.precio}
-                  </option>
-                ))}
-            </optgroup>
-          ))}
+          {catalogo
+            .filter((p) => p.grupo === elemento.grupo || p.grupo === "Ambos")
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} — ${p.precio}
+              </option>
+            ))}
         </select>
 
         {producto?.colores?.length > 0 && (

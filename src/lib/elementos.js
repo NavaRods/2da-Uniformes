@@ -22,6 +22,7 @@ export function listenElementos(callback) {
 export async function crearElemento(datos) {
   return addDoc(elementosRef, {
     unidad: datos.unidad || "2da Unidad",
+    grupo: datos.grupo || "Varonil",
     nombre: datos.nombre,
     edad: datos.edad || null,
     telefonos: datos.telefonos?.filter(Boolean) || [],

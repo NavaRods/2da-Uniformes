@@ -7,6 +7,7 @@ const FUENTES = ["Redes sociales", "Recomendación de alguien", "Publicidad/vola
 
 const FORM_VACIO = {
   unidad: "2da Unidad",
+  grupo: "Varonil",
   nombre: "",
   edad: "",
   telefonos: [""],
@@ -100,6 +101,17 @@ export default function Elementos() {
               onChange={(e) => setCampo("nombre", e.target.value)}
               required
             />
+          </div>
+
+          <div className="campo">
+            <label>Grupo *</label>
+            <select
+              value={form.grupo}
+              onChange={(e) => setCampo("grupo", e.target.value)}
+            >
+              <option>Varonil</option>
+              <option>Femenino</option>
+            </select>
           </div>
 
           <div className="campo">
@@ -269,6 +281,7 @@ export default function Elementos() {
             <Link to={`/elementos/${el.id}`} className="fila-lista">
               <span>{el.nombre}</span>
               <span className="etiquetas">
+                <span className="tag">{el.grupo}</span>
                 {el.documentacionEntregada && <span className="tag">📄</span>}
                 {el.pagaMensualidad && <span className="tag" title="Paga mensualidad">💳</span>}
                 {el.pagaInscripcion && <span className="tag" title="Paga inscripción">🎟️</span>}

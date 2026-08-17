@@ -151,6 +151,7 @@ export default function Uniformidad() {
             <p>
               <strong>{elementoParaConfirmar.nombre}</strong>
               {elementoParaConfirmar.unidad ? ` — ${elementoParaConfirmar.unidad}` : ""}
+              {elementoParaConfirmar.grupo ? ` (${elementoParaConfirmar.grupo})` : ""}
             </p>
             <div className="modal-acciones">
               <button className="btn-secondary" onClick={cancelarConfirmacion}>
@@ -187,17 +188,16 @@ export default function Uniformidad() {
             <h2>Agregar artículo</h2>
             <select value={productoId} onChange={(e) => onSeleccionarProducto(e.target.value)}>
               <option value="">Selecciona un producto...</option>
-              {["Varonil", "Femenino", "Ambos"].map((grupo) => (
-                <optgroup key={grupo} label={grupo}>
-                  {catalogo
-                    .filter((p) => p.grupo === grupo)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nombre} — ${p.precio}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
+              {catalogo
+                .filter(
+                  (p) =>
+                    p.grupo === elementoSeleccionado.grupo || p.grupo === "Ambos"
+                )
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} — ${p.precio}
+                  </option>
+                ))}
             </select>
 
             {producto?.colores?.length > 0 && (
