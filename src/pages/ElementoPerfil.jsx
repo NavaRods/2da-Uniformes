@@ -84,46 +84,51 @@ export default function ElementoPerfil() {
       <Link to="/elementos" className="volver">← Volver</Link>
       <h1>{elemento.nombre}</h1>
 
-      <div className="card ficha">
-        {datos.map(([etiqueta, valor]) => (
-          <div className="ficha-fila" key={etiqueta}>
-            <span className="ficha-etiqueta">{etiqueta}</span>
-            <span className="ficha-valor">{valor || "—"}</span>
-          </div>
-        ))}
-      </div>
+      <details className="card desplegable">
+        <summary>Información del elemento</summary>
+        <div className="ficha">
+          {datos.map(([etiqueta, valor]) => (
+            <div className="ficha-fila" key={etiqueta}>
+              <span className="ficha-etiqueta">{etiqueta}</span>
+              <span className="ficha-valor">{valor || "—"}</span>
+            </div>
+          ))}
+        </div>
+      </details>
 
-      <div className="card">
-        <h2>Pagos de cuota</h2>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={!!elemento.documentacionEntregada}
-            onChange={(e) => marcarDocumentacion(elementoId, e.target.checked)}
-          />
-          Documentación entregada (acta, CURP, etc. vía Google Form)
-        </label>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={!!elemento.pagaMensualidad}
-            onChange={(e) =>
-              actualizarElemento(elementoId, { pagaMensualidad: e.target.checked })
-            }
-          />
-          Paga mensualidad
-        </label>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={!!elemento.pagaInscripcion}
-            onChange={(e) =>
-              actualizarElemento(elementoId, { pagaInscripcion: e.target.checked })
-            }
-          />
-          Paga inscripción
-        </label>
-      </div>
+      <details className="card desplegable">
+        <summary>Pagos de cuota</summary>
+        <div className="desplegable-contenido">
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={!!elemento.documentacionEntregada}
+              onChange={(e) => marcarDocumentacion(elementoId, e.target.checked)}
+            />
+            Documentación entregada (acta, CURP, etc. vía Google Form)
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={!!elemento.pagaMensualidad}
+              onChange={(e) =>
+                actualizarElemento(elementoId, { pagaMensualidad: e.target.checked })
+              }
+            />
+            Paga mensualidad
+          </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={!!elemento.pagaInscripcion}
+              onChange={(e) =>
+                actualizarElemento(elementoId, { pagaInscripcion: e.target.checked })
+              }
+            />
+            Paga inscripción
+          </label>
+        </div>
+      </details>
 
       <form onSubmit={onNuevoPedido} className="card">
         <h2>Nuevo pedido</h2>
