@@ -3,17 +3,102 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function esUsuarioAutorizado() {
-      return request.auth != null &&
-        request.auth.token.email in [
-          "carlos.navarguez03@gmail.com"
-          // Agrega aquí el correo de tu compañera, ej:
-          // , "correo.companera@gmail.com"
-        ];
+    // --- Autorización ---
+    // Único punto de verdad de quién puede entrar. Editar esta lista es la
+    // única forma de dar/quitar acceso (agregar o quitar un correo aquí).
+    function correosAutorizados() {
+      return [
+        "carlos.navarguez03@gmail.com"
+        // Agrega aquí el correo de tu compañera, ej:
+        // , "correo.companera@gmail.com"
+      ];
     }
 
-    match /{document=**} {
+    function esUsuarioAutorizado() {
+      return request.auth != null &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email in correosAutorizados();
+    }
+
+    // --- Elementos ---
+    function elementoValido(datos) {
+      return datos.keys().hasOnly([
+        "unidad", "grupo", "nombre", "edad", "telefonos", "direccion",
+        "fechaNacimiento", "escuela", "turno", "gradoEscolar", "tutor",
+        "comoSeEntero", "seguroSocial", "alergias", "pagaMensualidad",
+        "pagaInscripcion", "documentacionEntregada", "creadoEn"
+      ]) &&
+      datos.nombre is string && datos.nombre.size() > 0 &&
+      (!("grupo" in datos) || datos.grupo is string) &&
+      (!("telefonos" in datos) || datos.telefonos is list) &&
+      (!("pagaMensualidad" in datos) || datos.pagaMensualidad is bool) &&
+      (!("pagaInscripcion" in datos) || datos.pagaInscripcion is bool) &&
+      (!("documentacionEntregada" in datos) || datos.documentacionEntregada is bool);
+    }
+
+    match /elementos/{elementoId} {
+      allow read: if esUsuarioAutorizado();
+      allow create, update: if esUsuarioAutorizado() && elementoValido(request.resource.data);
+      allow delete: if esUsuarioAutorizado();
+
+      // --- Pedidos de un elemento ---
+      function pedidoValido(datos) {
+        return datos.keys().hasOnly([
+          "articulo", "precioTotal", "saldoPendiente", "entregado",
+          "fechaEntrega", "creadoEn"
+        ]) &&
+        datos.articulo is string &&
+        datos.precioTotal is number &&
+        datos.saldoPendiente is number;
+      }
+
+      match /pedidos/{pedidoId} {
+        allow read: if esUsuarioAutorizado();
+        allow create, update: if esUsuarioAutorizado() && pedidoValido(request.resource.data);
+        allow delete: if esUsuarioAutorizado();
+
+        // --- Abonos de un pedido ---
+        function abonoValido(datos) {
+          return datos.keys().hasOnly(["monto", "quienRecibio", "fecha", "fechaLocal"]) &&
+          datos.monto is number &&
+          datos.fechaLocal is string;
+        }
+
+        match /abonos/{abonoId} {
+          allow read: if esUsuarioAutorizado();
+          allow create: if esUsuarioAutorizado() && abonoValido(request.resource.data);
+          // Los abonos son un registro histórico de pagos: no se editan ni
+          // se borran desde la app, para no perder rastro de un cobro.
+          allow update, delete: if false;
+        }
+      }
+    }
+
+    // --- Catálogo de productos ---
+    function productoValido(datos) {
+      return datos.keys().hasOnly(["nombre", "grupo", "precio", "tallaTipo", "tallas", "colores"]) &&
+      datos.nombre is string && datos.nombre.size() > 0 &&
+      datos.grupo is string &&
+      datos.precio is number &&
+      datos.tallaTipo is string &&
+      datos.tallas is list;
+    }
+
+    match /catalogo/{productoId} {
+      allow read: if esUsuarioAutorizado();
+      allow create, update: if esUsuarioAutorizado() && productoValido(request.resource.data);
+      allow delete: if esUsuarioAutorizado();
+    }
+
+    // --- Asistencia diaria ---
+    // Documento por día: { elementoId: true/false, ... }. Las claves son
+    // dinámicas (un ID por elemento) así que solo se valida que quien
+    // escribe esté autorizado.
+    match /asistencias/{fecha} {
       allow read, write: if esUsuarioAutorizado();
     }
+
+    // Cualquier otra ruta no contemplada arriba queda bloqueada por
+    // defecto (Firestore deniega lo que no coincide con una regla).
   }
 }
