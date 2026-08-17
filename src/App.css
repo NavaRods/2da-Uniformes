@@ -136,6 +136,8 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .form-grid {
@@ -445,6 +447,13 @@ td {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  outline: none;
+  border-radius: 6px;
+}
+
+.desplegable summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .desplegable summary::-webkit-details-marker {
