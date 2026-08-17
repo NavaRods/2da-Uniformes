@@ -8,127 +8,320 @@ import {
   TALLA_TIPO,
 } from "../lib/catalogo";
 
+const GRUPOS = ["Varonil", "Femenino", "Ambos"];
+
+const NUEVO_VACIO = {
+  nombre: "",
+  grupo: "Varonil",
+  precio: "",
+  tallaTipo: TALLA_TIPO.NINGUNA,
+};
+
 export default function Catalogo() {
   const [productos, setProductos] = useState([]);
-  const [nuevaTalla, setNuevaTalla] = useState({});
-  const [form, setForm] = useState({
-    nombre: "",
-    grupo: "Varonil",
-    precio: "",
-    tallaTipo: TALLA_TIPO.NINGUNA,
-  });
+  const [modo, setModo] = useState(null); // null | "editar" | "nuevo"
+  const [productoId, setProductoId] = useState("");
+
+  const [precioEditado, setPrecioEditado] = useState("");
+  const [tallasNuevas, setTallasNuevas] = useState([]);
+  const [tallaEnCurso, setTallaEnCurso] = useState("");
+
+  const [nuevoProducto, setNuevoProducto] = useState(NUEVO_VACIO);
+
+  const [pendientes, setPendientes] = useState([]);
+  const [guardando, setGuardando] = useState(false);
+  const [guardado, setGuardado] = useState(false);
 
   useEffect(() => listenCatalogo(setProductos), []);
+
+  const producto = productos.find((p) => p.id === productoId);
 
   async function onSembrar() {
     const hecho = await sembrarCatalogoInicial();
     if (!hecho) alert("El catálogo ya tiene productos, no se volvió a cargar.");
   }
 
-  async function onCrear(e) {
-    e.preventDefault();
-    if (!form.nombre || !form.precio) return;
-    await crearProducto({ ...form, tallas: [] });
-    setForm({ nombre: "", grupo: "Varonil", precio: "", tallaTipo: TALLA_TIPO.NINGUNA });
+  function iniciarEdicion(id) {
+    const p = productos.find((x) => x.id === id);
+    if (!p) return;
+    setProductoId(id);
+    setPrecioEditado(String(p.precio));
+    setTallasNuevas([]);
+    setTallaEnCurso("");
+    setModo("editar");
+    setGuardado(false);
   }
 
-  async function onAgregarTalla(productoId) {
-    const talla = nuevaTalla[productoId];
-    if (!talla) return;
-    await agregarTalla(productoId, talla);
-    setNuevaTalla({ ...nuevaTalla, [productoId]: "" });
+  function iniciarNuevo() {
+    setNuevoProducto(NUEVO_VACIO);
+    setModo("nuevo");
+    setGuardado(false);
   }
 
-  const grupos = ["Varonil", "Femenino", "Ambos"];
+  function cancelar() {
+    setModo(null);
+    setProductoId("");
+  }
+
+  function agregarTallaEnCurso() {
+    if (!tallaEnCurso.trim()) return;
+    setTallasNuevas((t) => [...t, tallaEnCurso.trim()]);
+    setTallaEnCurso("");
+  }
+
+  function quitarTallaEnCurso(i) {
+    setTallasNuevas((t) => t.filter((_, idx) => idx !== i));
+  }
+
+  function confirmarCambioProducto() {
+    if (!producto) return;
+    const precioCambio =
+      precioEditado !== "" && Number(precioEditado) !== producto.precio
+        ? Number(precioEditado)
+        : null;
+
+    if (precioCambio === null && tallasNuevas.length === 0) {
+      cancelar();
+      return;
+    }
+
+    setPendientes((p) => [
+      ...p,
+      {
+        key: crypto.randomUUID(),
+        tipo: "editar",
+        productoId: producto.id,
+        nombreProducto: producto.nombre,
+        precioAnterior: producto.precio,
+        precioNuevo: precioCambio,
+        tallasNuevas,
+      },
+    ]);
+
+    cancelar();
+  }
+
+  function confirmarNuevoProducto() {
+    if (!nuevoProducto.nombre.trim() || !nuevoProducto.precio) return;
+    setPendientes((p) => [
+      ...p,
+      {
+        key: crypto.randomUUID(),
+        tipo: "nuevo",
+        datos: { ...nuevoProducto },
+      },
+    ]);
+    cancelar();
+  }
+
+  function quitarPendiente(key) {
+    setPendientes((p) => p.filter((c) => c.key !== key));
+  }
+
+  async function guardarTodo() {
+    setGuardando(true);
+    for (const cambio of pendientes) {
+      if (cambio.tipo === "nuevo") {
+        await crearProducto(cambio.datos);
+      } else {
+        if (cambio.precioNuevo !== null) {
+          await editarProducto(cambio.productoId, { precio: cambio.precioNuevo });
+        }
+        for (const talla of cambio.tallasNuevas) {
+          await agregarTalla(cambio.productoId, talla);
+        }
+      }
+    }
+    setPendientes([]);
+    setGuardando(false);
+    setGuardado(true);
+  }
+
+  function descripcionCambio(c) {
+    if (c.tipo === "nuevo") {
+      return `Nuevo producto — ${c.datos.nombre} (${c.datos.grupo}) — $${c.datos.precio}`;
+    }
+    const partes = [];
+    if (c.precioNuevo !== null) {
+      partes.push(`Precio: $${c.precioAnterior} → $${c.precioNuevo}`);
+    }
+    if (c.tallasNuevas.length > 0) {
+      partes.push(`Tallas nuevas: ${c.tallasNuevas.join(", ")}`);
+    }
+    return `${c.nombreProducto} — ${partes.join(" · ")}`;
+  }
 
   return (
     <div className="page">
       <h1>Catálogo</h1>
 
       {productos.length === 0 && (
-        <button onClick={onSembrar}>Cargar catálogo inicial</button>
+        <button className="btn-primary" onClick={onSembrar}>
+          Cargar catálogo inicial
+        </button>
       )}
 
-      <form onSubmit={onCrear} className="card">
-        <h2>Agregar producto</h2>
-        <input
-          placeholder="Nombre"
-          value={form.nombre}
-          onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-        />
-        <select
-          value={form.grupo}
-          onChange={(e) => setForm({ ...form, grupo: e.target.value })}
-        >
-          {grupos.map((g) => (
-            <option key={g}>{g}</option>
-          ))}
-        </select>
-        <input
-          placeholder="Precio"
-          type="number"
-          value={form.precio}
-          onChange={(e) => setForm({ ...form, precio: e.target.value })}
-        />
-        <select
-          value={form.tallaTipo}
-          onChange={(e) => setForm({ ...form, tallaTipo: e.target.value })}
-        >
-          <option value={TALLA_TIPO.NINGUNA}>Sin talla</option>
-          <option value={TALLA_TIPO.LISTA}>Talla de lista (editable)</option>
-          <option value={TALLA_TIPO.LIBRE}>Talla libre (a la medida)</option>
-        </select>
-        <button type="submit">Agregar</button>
-      </form>
+      {guardado && <p className="success-msg">✅ Cambios guardados.</p>}
 
-      {grupos.map((grupo) => (
-        <div key={grupo}>
-          <h2>{grupo}</h2>
-          {productos
-            .filter((p) => p.grupo === grupo)
-            .map((p) => (
-              <div key={p.id} className="card">
-                <strong>
-                  {p.nombre} — ${p.precio}
-                </strong>
-                {p.colores?.length > 0 && (
-                  <p>Colores: {p.colores.join(", ")}</p>
-                )}
-                {p.tallaTipo === TALLA_TIPO.LISTA && (
-                  <>
-                    <p>Tallas: {p.tallas.join(", ") || "—"}</p>
-                    <div className="inline-form">
-                      <input
-                        placeholder="Nueva talla"
-                        value={nuevaTalla[p.id] || ""}
-                        onChange={(e) =>
-                          setNuevaTalla({ ...nuevaTalla, [p.id]: e.target.value })
-                        }
-                      />
-                      <button onClick={() => onAgregarTalla(p.id)}>
-                        Agregar talla
-                      </button>
-                    </div>
-                  </>
-                )}
-                {p.tallaTipo === TALLA_TIPO.LIBRE && (
-                  <p>Talla: se define a la medida al vender.</p>
-                )}
-                <div className="inline-form">
-                  <input
-                    placeholder="Editar precio"
-                    type="number"
-                    defaultValue={p.precio}
-                    onBlur={(e) =>
-                      e.target.value !== String(p.precio) &&
-                      editarProducto(p.id, { precio: Number(e.target.value) })
-                    }
-                  />
-                </div>
-              </div>
+      {modo === null && (
+        <div className="card">
+          <h2>Buscar producto para editar</h2>
+          <select value="" onChange={(e) => e.target.value && iniciarEdicion(e.target.value)}>
+            <option value="">Selecciona un producto...</option>
+            {GRUPOS.map((grupo) => (
+              <optgroup key={grupo} label={grupo}>
+                {productos
+                  .filter((p) => p.grupo === grupo)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre} — ${p.precio}
+                    </option>
+                  ))}
+              </optgroup>
             ))}
+          </select>
+          <button className="btn-secondary" onClick={iniciarNuevo}>
+            + Dar de alta un producto nuevo
+          </button>
         </div>
-      ))}
+      )}
+
+      {modo === "editar" && producto && (
+        <div className="card">
+          <h2>Editando: {producto.nombre}</h2>
+          <p className="ficha-etiqueta">
+            Grupo: {producto.grupo} · Tallas actuales:{" "}
+            {producto.tallas?.join(", ") || "—"}
+          </p>
+
+          <div className="campo">
+            <label>Precio</label>
+            <input
+              type="number"
+              value={precioEditado}
+              onChange={(e) => setPrecioEditado(e.target.value)}
+            />
+          </div>
+
+          {producto.tallaTipo === TALLA_TIPO.LISTA && (
+            <div className="campo">
+              <label>Agregar talla(s) nueva(s)</label>
+              <div className="inline-form">
+                <input
+                  placeholder="Nueva talla"
+                  value={tallaEnCurso}
+                  onChange={(e) => setTallaEnCurso(e.target.value)}
+                />
+                <button type="button" className="btn-secondary" onClick={agregarTallaEnCurso}>
+                  Agregar
+                </button>
+              </div>
+              {tallasNuevas.length > 0 && (
+                <div className="etiquetas">
+                  {tallasNuevas.map((t, i) => (
+                    <span className="tag" key={i}>
+                      {t}{" "}
+                      <button
+                        type="button"
+                        className="btn-secondary btn-small"
+                        onClick={() => quitarTallaEnCurso(i)}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="inline-form">
+            <button className="btn-secondary" onClick={cancelar}>
+              Cancelar
+            </button>
+            <button className="btn-primary" onClick={confirmarCambioProducto}>
+              Agregar cambio
+            </button>
+          </div>
+        </div>
+      )}
+
+      {modo === "nuevo" && (
+        <div className="card">
+          <h2>Nuevo producto</h2>
+          <div className="campo">
+            <label>Nombre</label>
+            <input
+              value={nuevoProducto.nombre}
+              onChange={(e) =>
+                setNuevoProducto({ ...nuevoProducto, nombre: e.target.value })
+              }
+            />
+          </div>
+          <div className="campo">
+            <label>Grupo</label>
+            <select
+              value={nuevoProducto.grupo}
+              onChange={(e) =>
+                setNuevoProducto({ ...nuevoProducto, grupo: e.target.value })
+              }
+            >
+              {GRUPOS.map((g) => (
+                <option key={g}>{g}</option>
+              ))}
+            </select>
+          </div>
+          <div className="campo">
+            <label>Precio</label>
+            <input
+              type="number"
+              value={nuevoProducto.precio}
+              onChange={(e) =>
+                setNuevoProducto({ ...nuevoProducto, precio: e.target.value })
+              }
+            />
+          </div>
+          <div className="campo">
+            <label>Tipo de talla</label>
+            <select
+              value={nuevoProducto.tallaTipo}
+              onChange={(e) =>
+                setNuevoProducto({ ...nuevoProducto, tallaTipo: e.target.value })
+              }
+            >
+              <option value={TALLA_TIPO.NINGUNA}>Sin talla</option>
+              <option value={TALLA_TIPO.LISTA}>Talla de lista (editable después)</option>
+              <option value={TALLA_TIPO.LIBRE}>Talla libre (a la medida)</option>
+            </select>
+          </div>
+
+          <div className="inline-form">
+            <button className="btn-secondary" onClick={cancelar}>
+              Cancelar
+            </button>
+            <button className="btn-primary" onClick={confirmarNuevoProducto}>
+              Agregar cambio
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pendientes.length > 0 && (
+        <div className="card">
+          <h2>Cambios pendientes</h2>
+          {pendientes.map((c) => (
+            <div className="carrito-item" key={c.key}>
+              <span>{descripcionCambio(c)}</span>
+              <button className="btn-secondary" onClick={() => quitarPendiente(c.key)}>
+                Quitar
+              </button>
+            </div>
+          ))}
+          <button className="btn-primary" onClick={guardarTodo} disabled={guardando}>
+            {guardando ? "Guardando..." : "Guardar todos los cambios"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
