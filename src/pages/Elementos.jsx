@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listenElementos, crearElemento } from "../lib/elementos";
-
-const TURNOS = ["Matutino", "Vespertino", "Nocturno", "Mixto"];
-const FUENTES = ["Redes sociales", "Recomendación de alguien", "Publicidad/volante", "Otro"];
+import { TURNOS, FUENTES } from "../lib/opciones";
 
 const FORM_VACIO = {
   unidad: "2da Unidad",

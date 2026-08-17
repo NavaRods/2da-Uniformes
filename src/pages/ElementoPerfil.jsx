@@ -9,6 +9,7 @@ import {
   marcarEntregado,
 } from "../lib/pedidos";
 import { listenCatalogo, TALLA_TIPO } from "../lib/catalogo";
+import { TURNOS, FUENTES, GRUPOS_ELEMENTO } from "../lib/opciones";
 import PedidoCard from "../components/PedidoCard";
 
 export default function ElementoPerfil() {
@@ -20,6 +21,10 @@ export default function ElementoPerfil() {
   const [talla, setTalla] = useState("");
   const [color, setColor] = useState("");
   const [precioManual, setPrecioManual] = useState("");
+
+  const [editando, setEditando] = useState(false);
+  const [formEdicion, setFormEdicion] = useState(null);
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "elementos", elementoId), (snap) => {
@@ -62,6 +67,68 @@ export default function ElementoPerfil() {
     setPrecioManual("");
   }
 
+  function iniciarEdicion() {
+    setFormEdicion({
+      unidad: elemento.unidad || "",
+      grupo: elemento.grupo || "Varonil",
+      nombre: elemento.nombre || "",
+      edad: elemento.edad || "",
+      telefonos: elemento.telefonos?.length ? [...elemento.telefonos] : [""],
+      direccion: elemento.direccion || "",
+      fechaNacimiento: elemento.fechaNacimiento || "",
+      escuela: elemento.escuela || "",
+      turno: elemento.turno || "",
+      gradoEscolar: elemento.gradoEscolar || "",
+      tutor: elemento.tutor || "",
+      comoSeEntero: elemento.comoSeEntero || "",
+      seguroSocial: elemento.seguroSocial || "",
+      alergias: elemento.alergias || "",
+    });
+    setEditando(true);
+  }
+
+  function cancelarEdicion() {
+    setEditando(false);
+    setFormEdicion(null);
+  }
+
+  function setCampoEdicion(campo, valor) {
+    setFormEdicion((f) => ({ ...f, [campo]: valor }));
+  }
+
+  function setTelefonoEdicion(i, valor) {
+    setFormEdicion((f) => {
+      const telefonos = [...f.telefonos];
+      telefonos[i] = valor;
+      return { ...f, telefonos };
+    });
+  }
+
+  function agregarTelefonoEdicion() {
+    setFormEdicion((f) => ({ ...f, telefonos: [...f.telefonos, ""] }));
+  }
+
+  function quitarTelefonoEdicion(i) {
+    setFormEdicion((f) => ({
+      ...f,
+      telefonos: f.telefonos.filter((_, idx) => idx !== i),
+    }));
+  }
+
+  async function guardarEdicion(e) {
+    e.preventDefault();
+    if (!formEdicion.nombre.trim()) return;
+    setGuardandoEdicion(true);
+    await actualizarElemento(elementoId, {
+      ...formEdicion,
+      edad: formEdicion.edad || null,
+      telefonos: formEdicion.telefonos.filter(Boolean),
+    });
+    setGuardandoEdicion(false);
+    setEditando(false);
+    setFormEdicion(null);
+  }
+
   if (!elemento) return <p className="page">Cargando...</p>;
 
   const datos = [
@@ -85,16 +152,192 @@ export default function ElementoPerfil() {
       <Link to="/elementos" className="volver">← Volver</Link>
       <h1>{elemento.nombre}</h1>
 
-      <details className="card desplegable">
+      <details className="card desplegable" open={editando}>
         <summary>Información del elemento</summary>
-        <div className="ficha">
-          {datos.map(([etiqueta, valor]) => (
-            <div className="ficha-fila" key={etiqueta}>
-              <span className="ficha-etiqueta">{etiqueta}</span>
-              <span className="ficha-valor">{valor || "—"}</span>
+
+        {!editando && (
+          <>
+            <div className="ficha">
+              {datos.map(([etiqueta, valor]) => (
+                <div className="ficha-fila" key={etiqueta}>
+                  <span className="ficha-etiqueta">{etiqueta}</span>
+                  <span className="ficha-valor">{valor || "—"}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+            <button className="btn-secondary btn-small" onClick={iniciarEdicion}>
+              ✏️ Editar
+            </button>
+          </>
+        )}
+
+        {editando && formEdicion && (
+          <form onSubmit={guardarEdicion} className="form-grid desplegable-contenido">
+            <div className="campo">
+              <label>Unidad</label>
+              <input
+                value={formEdicion.unidad}
+                onChange={(e) => setCampoEdicion("unidad", e.target.value)}
+              />
+            </div>
+
+            <div className="campo">
+              <label>Nombre del elemento *</label>
+              <input
+                value={formEdicion.nombre}
+                onChange={(e) => setCampoEdicion("nombre", e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="campo">
+              <label>Grupo *</label>
+              <select
+                value={formEdicion.grupo}
+                onChange={(e) => setCampoEdicion("grupo", e.target.value)}
+              >
+                {GRUPOS_ELEMENTO.map((g) => (
+                  <option key={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="campo">
+              <label>Edad</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={formEdicion.edad}
+                onChange={(e) =>
+                  setCampoEdicion("edad", e.target.value.replace(/\D/g, ""))
+                }
+              />
+            </div>
+
+            <div className="campo">
+              <label>Fecha de nacimiento</label>
+              <input
+                type="date"
+                value={formEdicion.fechaNacimiento}
+                onChange={(e) => setCampoEdicion("fechaNacimiento", e.target.value)}
+              />
+            </div>
+
+            <div className="campo campo-ancho">
+              <label>Teléfono(s)</label>
+              {formEdicion.telefonos.map((tel, i) => (
+                <div className="inline-form" key={i}>
+                  <input
+                    value={tel}
+                    placeholder="Número de teléfono"
+                    onChange={(e) => setTelefonoEdicion(i, e.target.value)}
+                  />
+                  {formEdicion.telefonos.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => quitarTelefonoEdicion(i)}
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                className="btn-secondary btn-small"
+                onClick={agregarTelefonoEdicion}
+              >
+                + Agregar otro teléfono
+              </button>
+            </div>
+
+            <div className="campo campo-ancho">
+              <label>Dirección domiciliaria</label>
+              <input
+                value={formEdicion.direccion}
+                onChange={(e) => setCampoEdicion("direccion", e.target.value)}
+              />
+            </div>
+
+            <div className="campo">
+              <label>Nombre de la escuela</label>
+              <input
+                value={formEdicion.escuela}
+                onChange={(e) => setCampoEdicion("escuela", e.target.value)}
+              />
+            </div>
+
+            <div className="campo">
+              <label>Turno</label>
+              <select
+                value={formEdicion.turno}
+                onChange={(e) => setCampoEdicion("turno", e.target.value)}
+              >
+                <option value="">Selecciona...</option>
+                {TURNOS.map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="campo">
+              <label>Grado escolar actual</label>
+              <input
+                value={formEdicion.gradoEscolar}
+                onChange={(e) => setCampoEdicion("gradoEscolar", e.target.value)}
+              />
+            </div>
+
+            <div className="campo">
+              <label>Nombre del padre, madre o tutor</label>
+              <input
+                value={formEdicion.tutor}
+                onChange={(e) => setCampoEdicion("tutor", e.target.value)}
+              />
+            </div>
+
+            <div className="campo">
+              <label>¿Cómo se enteró de nosotros?</label>
+              <select
+                value={formEdicion.comoSeEntero}
+                onChange={(e) => setCampoEdicion("comoSeEntero", e.target.value)}
+              >
+                <option value="">Selecciona...</option>
+                {FUENTES.map((f) => (
+                  <option key={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="campo">
+              <label>No. de Seguro Social o servicio médico</label>
+              <input
+                value={formEdicion.seguroSocial}
+                onChange={(e) => setCampoEdicion("seguroSocial", e.target.value)}
+              />
+            </div>
+
+            <div className="campo campo-ancho">
+              <label>Alergias o padecimientos médicos</label>
+              <textarea
+                value={formEdicion.alergias}
+                onChange={(e) => setCampoEdicion("alergias", e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            <div className="inline-form campo-ancho">
+              <button type="button" className="btn-secondary" onClick={cancelarEdicion}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn-primary" disabled={guardandoEdicion}>
+                {guardandoEdicion ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </div>
+          </form>
+        )}
       </details>
 
       <details className="card desplegable">
