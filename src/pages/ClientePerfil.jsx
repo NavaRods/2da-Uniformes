@@ -8,13 +8,18 @@ import {
   crearPedido,
   marcarEntregado,
 } from "../lib/pedidos";
+import { listenCatalogo, TALLA_TIPO } from "../lib/catalogo";
 import PedidoCard from "../components/PedidoCard";
 
 export default function ClientePerfil() {
   const { clienteId } = useParams();
   const [cliente, setCliente] = useState(null);
   const [pedidos, setPedidos] = useState([]);
-  const [nuevoPedido, setNuevoPedido] = useState({ articulo: "", precioTotal: "" });
+  const [catalogo, setCatalogo] = useState([]);
+  const [productoId, setProductoId] = useState("");
+  const [talla, setTalla] = useState("");
+  const [color, setColor] = useState("");
+  const [precioManual, setPrecioManual] = useState("");
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "clientes", clienteId), (snap) => {
@@ -24,12 +29,37 @@ export default function ClientePerfil() {
   }, [clienteId]);
 
   useEffect(() => listenPedidosDeCliente(clienteId, setPedidos), [clienteId]);
+  useEffect(() => listenCatalogo(setCatalogo), []);
+
+  const producto = catalogo.find((p) => p.id === productoId);
+
+  function onSeleccionarProducto(id) {
+    setProductoId(id);
+    const p = catalogo.find((x) => x.id === id);
+    setTalla("");
+    setColor(p?.colores?.[0] || "");
+    setPrecioManual(p ? String(p.precio) : "");
+  }
 
   async function onNuevoPedido(e) {
     e.preventDefault();
-    if (!nuevoPedido.articulo || !nuevoPedido.precioTotal) return;
-    await crearPedido(clienteId, nuevoPedido);
-    setNuevoPedido({ articulo: "", precioTotal: "" });
+    if (!producto || !precioManual) return;
+    if (producto.tallaTipo === TALLA_TIPO.LISTA && !talla) return;
+    if (producto.tallaTipo === TALLA_TIPO.LIBRE && !talla) return;
+
+    const partes = [producto.nombre];
+    if (color) partes.push(color);
+    if (talla) partes.push(`talla ${talla}`);
+
+    await crearPedido(clienteId, {
+      articulo: partes.join(" — "),
+      precioTotal: precioManual,
+    });
+
+    setProductoId("");
+    setTalla("");
+    setColor("");
+    setPrecioManual("");
   }
 
   if (!cliente) return <p className="page">Cargando...</p>;
@@ -51,22 +81,58 @@ export default function ClientePerfil() {
 
       <form onSubmit={onNuevoPedido} className="card">
         <h2>Nuevo pedido</h2>
-        <input
-          placeholder="Artículo (ej. Uniforme talla M)"
-          value={nuevoPedido.articulo}
-          onChange={(e) =>
-            setNuevoPedido({ ...nuevoPedido, articulo: e.target.value })
-          }
-        />
-        <input
-          placeholder="Precio total"
-          type="number"
-          value={nuevoPedido.precioTotal}
-          onChange={(e) =>
-            setNuevoPedido({ ...nuevoPedido, precioTotal: e.target.value })
-          }
-        />
-        <button type="submit">Agregar pedido</button>
+        <select value={productoId} onChange={(e) => onSeleccionarProducto(e.target.value)}>
+          <option value="">Selecciona un producto...</option>
+          {["Varonil", "Femenino", "Ambos"].map((grupo) => (
+            <optgroup key={grupo} label={grupo}>
+              {catalogo
+                .filter((p) => p.grupo === grupo)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre} — ${p.precio}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </select>
+
+        {producto?.colores?.length > 0 && (
+          <select value={color} onChange={(e) => setColor(e.target.value)}>
+            {producto.colores.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        )}
+
+        {producto?.tallaTipo === TALLA_TIPO.LISTA && (
+          <select value={talla} onChange={(e) => setTalla(e.target.value)}>
+            <option value="">Talla...</option>
+            {producto.tallas.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        )}
+
+        {producto?.tallaTipo === TALLA_TIPO.LIBRE && (
+          <input
+            placeholder="Talla (a la medida)"
+            value={talla}
+            onChange={(e) => setTalla(e.target.value)}
+          />
+        )}
+
+        {producto && (
+          <input
+            placeholder="Precio total"
+            type="number"
+            value={precioManual}
+            onChange={(e) => setPrecioManual(e.target.value)}
+          />
+        )}
+
+        <button type="submit" disabled={!producto}>
+          Agregar pedido
+        </button>
       </form>
 
       <h2>Pedidos</h2>

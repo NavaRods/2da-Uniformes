@@ -6,6 +6,7 @@ import ClientePerfil from "./pages/ClientePerfil";
 import Asistencia from "./pages/Asistencia";
 import ReporteAsistencia from "./pages/ReporteAsistencia";
 import RelacionPagos from "./pages/RelacionPagos";
+import Catalogo from "./pages/Catalogo";
 import "./App.css";
 
 function Privado({ children }) {
@@ -24,6 +25,7 @@ function Nav() {
       <Link to="/asistencia">Asistencia</Link>
       <Link to="/reporte-asistencia">Reporte mensual</Link>
       <Link to="/pagos">Relación de pagos</Link>
+      <Link to="/catalogo">Catálogo</Link>
       <button onClick={logout}>Salir ({user.displayName || user.email})</button>
     </nav>
   );
@@ -73,6 +75,14 @@ export default function App() {
             element={
               <Privado>
                 <RelacionPagos />
+              </Privado>
+            }
+          />
+          <Route
+            path="/catalogo"
+            element={
+              <Privado>
+                <Catalogo />
               </Privado>
             }
           />
