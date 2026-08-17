@@ -360,6 +360,82 @@ td {
   font-size: 14px;
 }
 
+/* --- Modal --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 360px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.modal-acciones {
+  display: flex;
+  gap: 10px;
+}
+
+.modal-acciones button {
+  flex: 1;
+}
+
+/* --- Uniformidad (venta) --- */
+.venta-elemento {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--tag-bg);
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+
+.carrito-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.carrito-item button {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.success-msg {
+  color: var(--success);
+  font-weight: 500;
+  margin: 8px 0;
+}
+
+.carrito-total {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  font-size: 17px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
 /* --- Login --- */
 .login-screen {
   padding: 60px 16px;

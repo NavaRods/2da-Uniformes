@@ -8,6 +8,7 @@ import Asistencia from "./pages/Asistencia";
 import ReporteAsistencia from "./pages/ReporteAsistencia";
 import RelacionPagos from "./pages/RelacionPagos";
 import Catalogo from "./pages/Catalogo";
+import Uniformidad from "./pages/Uniformidad";
 import "./App.css";
 
 function Privado({ children }) {
@@ -26,9 +27,9 @@ function Nav() {
   const links = [
     ["/elementos", "Elementos"],
     ["/asistencia", "Asistencia"],
-    ["/reporte-asistencia", "Reporte mensual"],
+    ["/reporte-asistencia", "Reportes"],
     ["/pagos", "Relación de pagos"],
-    ["/catalogo", "Catálogo"],
+    ["/uniformidad", "Uniformidad"],
   ];
 
   return (
@@ -104,6 +105,14 @@ function AppRoutes() {
           element={
             <Privado>
               <Catalogo />
+            </Privado>
+          }
+        />
+        <Route
+          path="/uniformidad"
+          element={
+            <Privado>
+              <Uniformidad />
             </Privado>
           }
         />
