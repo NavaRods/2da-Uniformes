@@ -20,6 +20,7 @@ const FORM_VACIO = {
   seguroSocial: "",
   alergias: "",
   pagaMensualidad: false,
+  pagaInscripcion: false,
 };
 
 export default function Elementos() {
@@ -104,9 +105,13 @@ export default function Elementos() {
           <div className="campo">
             <label>Edad</label>
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={form.edad}
-              onChange={(e) => setCampo("edad", e.target.value)}
+              onChange={(e) =>
+                setCampo("edad", e.target.value.replace(/\D/g, ""))
+              }
             />
           </div>
 
@@ -230,7 +235,18 @@ export default function Elementos() {
                 checked={form.pagaMensualidad}
                 onChange={(e) => setCampo("pagaMensualidad", e.target.checked)}
               />
-              Paga mensualidad / inscripción
+              Paga mensualidad
+            </label>
+          </div>
+
+          <div className="campo">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={form.pagaInscripcion}
+                onChange={(e) => setCampo("pagaInscripcion", e.target.checked)}
+              />
+              Paga inscripción
             </label>
           </div>
 
@@ -254,7 +270,8 @@ export default function Elementos() {
               <span>{el.nombre}</span>
               <span className="etiquetas">
                 {el.documentacionEntregada && <span className="tag">📄</span>}
-                {el.pagaMensualidad && <span className="tag">💳</span>}
+                {el.pagaMensualidad && <span className="tag" title="Paga mensualidad">💳</span>}
+                {el.pagaInscripcion && <span className="tag" title="Paga inscripción">🎟️</span>}
               </span>
             </Link>
           </li>

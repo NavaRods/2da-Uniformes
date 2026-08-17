@@ -35,6 +35,7 @@ export async function crearElemento(datos) {
     seguroSocial: datos.seguroSocial || "",
     alergias: datos.alergias || "",
     pagaMensualidad: !!datos.pagaMensualidad,
+    pagaInscripcion: !!datos.pagaInscripcion,
     documentacionEntregada: false,
     creadoEn: serverTimestamp(),
   });

@@ -78,6 +78,7 @@ export default function ElementoPerfil() {
     ["Seguro social / servicio médico", elemento.seguroSocial],
     ["Alergias / padecimientos", elemento.alergias],
     ["Paga mensualidad", elemento.pagaMensualidad ? "Sí" : "No"],
+    ["Paga inscripción", elemento.pagaInscripcion ? "Sí" : "No"],
   ];
 
   return (
