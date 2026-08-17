@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
-import { marcarDocumentacion } from "../lib/elementos";
+import { marcarDocumentacion, actualizarElemento } from "../lib/elementos";
 import {
   listenPedidosDeElemento,
   crearPedido,
@@ -77,8 +77,6 @@ export default function ElementoPerfil() {
     ["Cómo se enteró", elemento.comoSeEntero],
     ["Seguro social / servicio médico", elemento.seguroSocial],
     ["Alergias / padecimientos", elemento.alergias],
-    ["Paga mensualidad", elemento.pagaMensualidad ? "Sí" : "No"],
-    ["Paga inscripción", elemento.pagaInscripcion ? "Sí" : "No"],
   ];
 
   return (
@@ -95,14 +93,37 @@ export default function ElementoPerfil() {
         ))}
       </div>
 
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          checked={!!elemento.documentacionEntregada}
-          onChange={(e) => marcarDocumentacion(elementoId, e.target.checked)}
-        />
-        Documentación entregada (acta, CURP, etc. vía Google Form)
-      </label>
+      <div className="card">
+        <h2>Pagos de cuota</h2>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={!!elemento.documentacionEntregada}
+            onChange={(e) => marcarDocumentacion(elementoId, e.target.checked)}
+          />
+          Documentación entregada (acta, CURP, etc. vía Google Form)
+        </label>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={!!elemento.pagaMensualidad}
+            onChange={(e) =>
+              actualizarElemento(elementoId, { pagaMensualidad: e.target.checked })
+            }
+          />
+          Paga mensualidad
+        </label>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={!!elemento.pagaInscripcion}
+            onChange={(e) =>
+              actualizarElemento(elementoId, { pagaInscripcion: e.target.checked })
+            }
+          />
+          Paga inscripción
+        </label>
+      </div>
 
       <form onSubmit={onNuevoPedido} className="card">
         <h2>Nuevo pedido</h2>
