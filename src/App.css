@@ -115,6 +115,8 @@ svg {
 .page {
   padding: 20px 16px 48px;
   max-width: 760px;
+  width: 100%;
+  min-width: 0;
   margin: 0 auto;
 }
 
