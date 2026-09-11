@@ -5,14 +5,13 @@ import {
   crearProducto,
   editarProducto,
   agregarTalla,
+  eliminarProducto,
+  vaciarCatalogo,
   TALLA_TIPO,
 } from "../lib/catalogo";
 
-const GRUPOS = ["Varonil", "Femenino", "Ambos"];
-
 const NUEVO_VACIO = {
   nombre: "",
-  grupo: "Varonil",
   precio: "",
   tallaTipo: TALLA_TIPO.NINGUNA,
 };
@@ -31,6 +30,7 @@ export default function Catalogo() {
   const [pendientes, setPendientes] = useState([]);
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
+  const [vaciando, setVaciando] = useState(false);
 
   useEffect(() => listenCatalogo(setProductos), []);
 
@@ -39,6 +39,28 @@ export default function Catalogo() {
   async function onSembrar() {
     const hecho = await sembrarCatalogoInicial();
     if (!hecho) alert("El catálogo ya tiene productos, no se volvió a cargar.");
+  }
+
+  async function onEliminarProducto(id, nombre) {
+    if (!confirm(`¿Eliminar "${nombre}" del catálogo? Esto no borra pedidos ya creados.`)) {
+      return;
+    }
+    await eliminarProducto(id);
+  }
+
+  async function onVaciarCatalogo() {
+    if (
+      !confirm(
+        `Esto eliminará los ${productos.length} productos del catálogo (no borra pedidos ni elementos ya registrados). ¿Continuar?`
+      )
+    ) {
+      return;
+    }
+    setVaciando(true);
+    await vaciarCatalogo();
+    setVaciando(false);
+    cancelar();
+    setPendientes([]);
   }
 
   function iniciarEdicion(id) {
@@ -139,7 +161,7 @@ export default function Catalogo() {
 
   function descripcionCambio(c) {
     if (c.tipo === "nuevo") {
-      return `Nuevo producto — ${c.datos.nombre} (${c.datos.grupo}) — $${c.datos.precio}`;
+      return `Nuevo producto — ${c.datos.nombre} — $${c.datos.precio}`;
     }
     const partes = [];
     if (c.precioNuevo !== null) {
@@ -161,6 +183,18 @@ export default function Catalogo() {
         </button>
       )}
 
+      {productos.length > 0 && (
+        <button
+          className="btn-secondary"
+          onClick={onVaciarCatalogo}
+          disabled={vaciando}
+        >
+          {vaciando
+            ? "Eliminando..."
+            : `🗑️ Eliminar todos los productos (${productos.length})`}
+        </button>
+      )}
+
       {guardado && <p className="success-msg">✅ Cambios guardados.</p>}
 
       {modo === null && (
@@ -168,18 +202,33 @@ export default function Catalogo() {
           <h2>Buscar producto para editar</h2>
           <select value="" onChange={(e) => e.target.value && iniciarEdicion(e.target.value)}>
             <option value="">Selecciona un producto...</option>
-            {GRUPOS.map((grupo) => (
-              <optgroup key={grupo} label={grupo}>
-                {productos
-                  .filter((p) => p.grupo === grupo)
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nombre} — ${p.precio}
-                    </option>
-                  ))}
-              </optgroup>
+            {productos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nombre} — ${p.precio}
+              </option>
             ))}
           </select>
+
+          {productos.length > 0 && (
+            <details className="desplegable">
+              <summary>Eliminar un producto individual</summary>
+              <ul className="lista desplegable-contenido">
+                {productos.map((p) => (
+                  <li key={p.id} className="carrito-item">
+                    <span>
+                      {p.nombre} — ${p.precio}
+                    </span>
+                    <button
+                      className="btn-secondary btn-small"
+                      onClick={() => onEliminarProducto(p.id, p.nombre)}
+                    >
+                      Eliminar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <button className="btn-secondary" onClick={iniciarNuevo}>
             + Dar de alta un producto nuevo
           </button>
@@ -190,8 +239,7 @@ export default function Catalogo() {
         <div className="card">
           <h2>Editando: {producto.nombre}</h2>
           <p className="ficha-etiqueta">
-            Grupo: {producto.grupo} · Tallas actuales:{" "}
-            {producto.tallas?.join(", ") || "—"}
+            Tallas actuales: {producto.tallas?.join(", ") || "—"}
           </p>
 
           <div className="campo">
@@ -257,19 +305,6 @@ export default function Catalogo() {
                 setNuevoProducto({ ...nuevoProducto, nombre: e.target.value })
               }
             />
-          </div>
-          <div className="campo">
-            <label>Grupo</label>
-            <select
-              value={nuevoProducto.grupo}
-              onChange={(e) =>
-                setNuevoProducto({ ...nuevoProducto, grupo: e.target.value })
-              }
-            >
-              {GRUPOS.map((g) => (
-                <option key={g}>{g}</option>
-              ))}
-            </select>
           </div>
           <div className="campo">
             <label>Precio</label>

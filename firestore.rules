@@ -44,12 +44,16 @@ service cloud.firestore {
       // --- Pedidos de un elemento ---
       function pedidoValido(datos) {
         return datos.keys().hasOnly([
-          "articulo", "precioTotal", "saldoPendiente", "entregado",
-          "fechaEntrega", "creadoEn"
+          "articulo", "productoNombre", "talla", "color", "cantidad",
+          "precioTotal", "saldoPendiente", "entregado", "quienEntrego",
+          "fechaEntrega", "cambioPendiente", "motivoCambio",
+          "fechaCambioSolicitado", "creadoEn"
         ]) &&
         datos.articulo is string &&
         datos.precioTotal is number &&
-        datos.saldoPendiente is number;
+        datos.saldoPendiente is number &&
+        (!("cambioPendiente" in datos) || datos.cambioPendiente is bool) &&
+        (!("entregado" in datos) || datos.entregado is bool);
       }
 
       match /pedidos/{pedidoId} {
@@ -59,7 +63,7 @@ service cloud.firestore {
 
         // --- Abonos de un pedido ---
         function abonoValido(datos) {
-          return datos.keys().hasOnly(["monto", "quienRecibio", "fecha", "fechaLocal"]) &&
+          return datos.keys().hasOnly(["monto", "quienRecibio", "fecha", "fechaLocal", "horaLocal"]) &&
           datos.monto is number &&
           datos.fechaLocal is string;
         }
@@ -75,10 +79,12 @@ service cloud.firestore {
     }
 
     // --- Catálogo de productos ---
+    // "grupo" ya no lo usa la app (el catálogo dejó de separarse por
+    // Varonil/Femenino), pero se deja como campo permitido opcional para no
+    // romper productos antiguos que todavía lo tengan guardado.
     function productoValido(datos) {
       return datos.keys().hasOnly(["nombre", "grupo", "precio", "tallaTipo", "tallas", "colores"]) &&
       datos.nombre is string && datos.nombre.size() > 0 &&
-      datos.grupo is string &&
       datos.precio is number &&
       datos.tallaTipo is string &&
       datos.tallas is list;

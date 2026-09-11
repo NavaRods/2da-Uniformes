@@ -3,11 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { marcarDocumentacion, actualizarElemento } from "../lib/elementos";
-import {
-  listenPedidosDeElemento,
-  crearPedido,
-  marcarEntregado,
-} from "../lib/pedidos";
+import { listenPedidosDeElemento, crearPedido } from "../lib/pedidos";
 import { listenCatalogo, TALLA_TIPO } from "../lib/catalogo";
 import { TURNOS, FUENTES, GRUPOS_ELEMENTO } from "../lib/opciones";
 import PedidoCard from "../components/PedidoCard";
@@ -59,6 +55,10 @@ export default function ElementoPerfil() {
     await crearPedido(elementoId, {
       articulo: partes.join(" — "),
       precioTotal: precioManual,
+      productoNombre: producto.nombre,
+      talla,
+      color,
+      cantidad: 1,
     });
 
     setProductoId("");
@@ -147,10 +147,41 @@ export default function ElementoPerfil() {
     ["Alergias / padecimientos", elemento.alergias],
   ];
 
+  const totalPedidos = pedidos.reduce((s, p) => s + (p.precioTotal || 0), 0);
+  const totalAdeudado = pedidos.reduce(
+    (s, p) => s + Math.max(p.saldoPendiente || 0, 0),
+    0
+  );
+  const totalPagado = totalPedidos - totalAdeudado;
+  const pendientesEntrega = pedidos.filter((p) => !p.entregado).length;
+  const cambiosPendientes = pedidos.filter((p) => p.cambioPendiente).length;
+
   return (
     <div className="page">
       <Link to="/elementos" className="volver">← Volver</Link>
       <h1>{elemento.nombre}</h1>
+
+      <div className="card resumen-uniformidad">
+        <h2>Uniformidad</h2>
+        <div className="ficha">
+          <div className="ficha-fila">
+            <span className="ficha-etiqueta">Pagado</span>
+            <span className="ficha-valor">${totalPagado}</span>
+          </div>
+          <div className="ficha-fila">
+            <span className="ficha-etiqueta">Adeudado</span>
+            <span className="ficha-valor">${totalAdeudado}</span>
+          </div>
+          <div className="ficha-fila">
+            <span className="ficha-etiqueta">Piezas por entregar</span>
+            <span className="ficha-valor">{pendientesEntrega}</span>
+          </div>
+          <div className="ficha-fila">
+            <span className="ficha-etiqueta">Cambios pendientes</span>
+            <span className="ficha-valor">{cambiosPendientes}</span>
+          </div>
+        </div>
+      </div>
 
       <details className="card desplegable" open={editando}>
         <summary>Información del elemento</summary>
@@ -378,13 +409,11 @@ export default function ElementoPerfil() {
         <h2>Nuevo pedido</h2>
         <select value={productoId} onChange={(e) => onSeleccionarProducto(e.target.value)}>
           <option value="">Selecciona un producto...</option>
-          {catalogo
-            .filter((p) => p.grupo === elemento.grupo || p.grupo === "Ambos")
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nombre} — ${p.precio}
-              </option>
-            ))}
+          {catalogo.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nombre} — ${p.precio}
+            </option>
+          ))}
         </select>
 
         {producto?.colores?.length > 0 && (
@@ -429,14 +458,7 @@ export default function ElementoPerfil() {
       <h2>Pedidos</h2>
       {pedidos.length === 0 && <p>Sin pedidos todavía.</p>}
       {pedidos.map((p) => (
-        <PedidoCard
-          key={p.id}
-          cliente={elemento}
-          pedido={p}
-          onEntregar={(entregado) =>
-            marcarEntregado(elementoId, p.id, entregado)
-          }
-        />
+        <PedidoCard key={p.id} cliente={elemento} pedido={p} />
       ))}
     </div>
   );

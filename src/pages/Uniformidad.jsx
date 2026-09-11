@@ -73,6 +73,9 @@ export default function Uniformidad() {
       {
         key: crypto.randomUUID(),
         articulo: partes.join(" — "),
+        productoNombre: producto.nombre,
+        talla,
+        color,
         precioTotal: producto.precio,
         tipoPago,
         monto: Number(monto),
@@ -98,6 +101,10 @@ export default function Uniformidad() {
       const pedidoRef = await crearPedido(elementoSeleccionado.id, {
         articulo: item.articulo,
         precioTotal: item.precioTotal,
+        productoNombre: item.productoNombre,
+        talla: item.talla,
+        color: item.color,
+        cantidad: 1,
       });
       await registrarAbono(elementoSeleccionado.id, pedidoRef.id, {
         monto: item.monto,
@@ -188,16 +195,11 @@ export default function Uniformidad() {
             <h2>Agregar artículo</h2>
             <select value={productoId} onChange={(e) => onSeleccionarProducto(e.target.value)}>
               <option value="">Selecciona un producto...</option>
-              {catalogo
-                .filter(
-                  (p) =>
-                    p.grupo === elementoSeleccionado.grupo || p.grupo === "Ambos"
-                )
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre} — ${p.precio}
-                  </option>
-                ))}
+              {catalogo.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre} — ${p.precio}
+                </option>
+              ))}
             </select>
 
             {producto?.colores?.length > 0 && (

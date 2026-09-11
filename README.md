@@ -35,3 +35,32 @@ npm run preview
 
 El resultado en `dist/` es una PWA instalable (se puede alojar gratis en
 Firebase Hosting, Vercel o Netlify).
+
+## Pruebas
+
+La lógica de negocio (`src/lib/*.js`: pedidos, catálogo, elementos, mensajes
+de WhatsApp) tiene pruebas automatizadas con [Vitest](https://vitest.dev).
+Estas pruebas no tocan Firebase real: simulan (mockean) el SDK de Firestore
+para verificar que cada función arma los datos correctos.
+
+```bash
+npm test          # corre las pruebas una vez
+npm run test:watch  # las vuelve a correr al guardar cambios
+```
+
+Qué cubren:
+
+- **pedidos**: un pedido nuevo arranca con el saldo completo y sin entregar;
+  cada abono descuenta del saldo sin "cerrar" el pedido a mano; marcar/
+  resolver un cambio pendiente guarda y limpia el motivo correctamente;
+  entregar (o cancelar la entrega) registra quién y cuándo.
+- **catálogo**: crear un producto usa valores por defecto razonables;
+  agregar una talla no duplica las existentes; vaciar el catálogo borra
+  todo en un solo batch y no hace nada si ya está vacío.
+- **elementos**: dar de alta un elemento aplica los valores por defecto
+  esperados y filtra teléfonos vacíos.
+- **whatsapp**: los mensajes de comprobante, entrega y cambio pendiente
+  incluyen el texto y los datos correctos según el caso.
+
+Antes de subir un cambio a la lógica de `src/lib/`, corre `npm test` para
+confirmar que nada se rompió.
