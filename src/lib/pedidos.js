@@ -10,6 +10,8 @@ import {
   serverTimestamp,
   increment,
   where,
+  getDocs,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { fechaLocalISO, horaLocalHHMM } from "./format";
@@ -74,6 +76,18 @@ export async function marcarCambioPendiente(
     motivoCambio: pendiente ? motivo || "" : "",
     fechaCambioSolicitado: pendiente ? serverTimestamp() : null,
   });
+}
+
+// Elimina un pedido junto con sus abonos (Firestore no borra las
+// subcolecciones solas; si quedaran, seguirían apareciendo en la Relación de
+// pagos como cobros de un pedido que ya no existe).
+export async function eliminarPedido(elementoId, pedidoId) {
+  const abonosRef = collection(db, "elementos", elementoId, "pedidos", pedidoId, "abonos");
+  const abonos = await getDocs(abonosRef);
+  const batch = writeBatch(db);
+  abonos.docs.forEach((d) => batch.delete(d.ref));
+  batch.delete(doc(db, "elementos", elementoId, "pedidos", pedidoId));
+  await batch.commit();
 }
 
 export function listenAbonosDePedido(elementoId, pedidoId, callback) {

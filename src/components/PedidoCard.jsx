@@ -4,6 +4,7 @@ import {
   registrarAbono,
   marcarEntregado,
   marcarCambioPendiente,
+  eliminarPedido,
 } from "../lib/pedidos";
 import {
   linkWhatsapp,
@@ -26,6 +27,7 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
   const [monto, setMonto] = useState("");
   const [motivoCambio, setMotivoCambio] = useState("");
   const [mostrarFormCambio, setMostrarFormCambio] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(
     () => listenAbonosDePedido(elemento.id, pedido.id, setAbonos),
@@ -98,7 +100,26 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
     );
   }
 
+  const totalAbonado = abonos.reduce((suma, a) => suma + Number(a.monto), 0);
+
+  async function onEliminar() {
+    const aviso =
+      totalAbonado > 0
+        ? `Se eliminarán también los pagos registrados en este pedido ($${totalAbonado}) y dejarán de aparecer en la Relación de pagos.`
+        : "Este pedido no tiene pagos registrados.";
+    if (!confirm(`¿Eliminar "${pedido.articulo}"? ${aviso} Esta acción no se puede deshacer.`)) {
+      return;
+    }
+    setError("");
+    try {
+      await eliminarPedido(elemento.id, pedido.id);
+    } catch {
+      setError("No se pudo eliminar. Verifica tu conexión e inténtalo de nuevo.");
+    }
+  }
+
   const liquidado = pedido.saldoPendiente <= 0;
+
 
   return (
     <div className="card">
@@ -108,6 +129,8 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
       <p>
         Estado: {liquidado ? "Liquidado ✅" : `Debe $${pedido.saldoPendiente}`}
       </p>
+
+      {error && <p className="error">{error}</p>}
 
       {pedido.cambioPendiente && (
         <p className="aviso-cambio">
@@ -178,6 +201,10 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
           ✅ Marcar cambio resuelto
         </button>
       )}
+
+      <button type="button" className="btn-secondary btn-small" onClick={onEliminar}>
+        🗑️ Eliminar pedido
+      </button>
 
       {abonos.length > 0 && (
         <details>

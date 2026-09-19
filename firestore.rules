@@ -72,9 +72,10 @@ service cloud.firestore {
         match /abonos/{abonoId} {
           allow read: if esUsuarioAutorizado();
           allow create: if esUsuarioAutorizado() && abonoValido(request.resource.data);
-          // Los abonos son un registro histórico de pagos: no se editan ni
-          // se borran desde la app, para no perder rastro de un cobro.
-          allow update, delete: if false;
+          // Los abonos no se editan. Solo se borran al eliminar el pedido
+          // completo (la app los borra junto con el pedido).
+          allow update: if false;
+          allow delete: if esUsuarioAutorizado();
         }
       }
     }

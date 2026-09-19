@@ -14,6 +14,8 @@ const query = vi.fn((ref) => ref);
 const orderBy = vi.fn();
 const where = vi.fn();
 const onSnapshot = vi.fn();
+const getDocs = vi.fn(async () => ({ docs: [] }));
+const batch = { delete: vi.fn(), commit: vi.fn(async () => {}) };
 const collectionGroup = vi.fn((_db, name) => ({ __type: "collectionGroup", name }));
 
 vi.mock("firebase/firestore", () => ({
@@ -28,6 +30,8 @@ vi.mock("firebase/firestore", () => ({
   serverTimestamp: (...args) => serverTimestamp(...args),
   increment: (...args) => increment(...args),
   where: (...args) => where(...args),
+  getDocs: (...args) => getDocs(...args),
+  writeBatch: () => batch,
 }));
 
 vi.mock("../firebase", () => ({ db: {} }));
@@ -37,6 +41,7 @@ const {
   marcarEntregado,
   marcarCambioPendiente,
   registrarAbono,
+  eliminarPedido,
 } = await import("./pedidos");
 
 beforeEach(() => {
@@ -127,5 +132,22 @@ describe("registrarAbono", () => {
     expect(addDoc).toHaveBeenCalledTimes(2);
     expect(increment).toHaveBeenNthCalledWith(1, -50);
     expect(increment).toHaveBeenNthCalledWith(2, -75);
+  });
+});
+
+describe("eliminarPedido", () => {
+  it("borra el pedido y todos sus abonos en un solo batch", async () => {
+    batch.delete.mockClear();
+    batch.commit.mockClear();
+    getDocs.mockResolvedValueOnce({ docs: [{ ref: "a1" }, { ref: "a2" }] });
+    await eliminarPedido("el1", "p1");
+    expect(batch.delete).toHaveBeenCalledWith("a1");
+    expect(batch.delete).toHaveBeenCalledWith("a2");
+    expect(batch.delete).toHaveBeenCalledWith({
+      __type: "doc",
+      path: ["elementos", "el1", "pedidos", "p1"],
+    });
+    expect(batch.delete).toHaveBeenCalledTimes(3);
+    expect(batch.commit).toHaveBeenCalledTimes(1);
   });
 });
