@@ -22,7 +22,6 @@ export default function ElementoPerfil() {
   const [productoId, setProductoId] = useState("");
   const [talla, setTalla] = useState("");
   const [color, setColor] = useState("");
-  const [precioManual, setPrecioManual] = useState("");
   const [tipoPago, setTipoPago] = useState("liquidacion"); // liquidacion | abono
   const [montoAbono, setMontoAbono] = useState("");
   const [guardandoPedido, setGuardandoPedido] = useState(false);
@@ -49,18 +48,21 @@ export default function ElementoPerfil() {
     const p = catalogo.find((x) => x.id === id);
     setTalla("");
     setColor(p?.colores?.[0] || "");
-    setPrecioManual(p ? String(p.precio) : "");
     setTipoPago("liquidacion");
     setMontoAbono("");
   }
 
   async function onNuevoPedido(e) {
     e.preventDefault();
-    if (!producto || !precioManual) return;
+    if (!producto) return;
+    if (!(producto.precio > 0)) {
+      setErrorPedido("Este producto no tiene precio. Ponlo en el Catálogo.");
+      return;
+    }
     if (producto.tallaTipo === TALLA_TIPO.LISTA && !talla) return;
     if (producto.tallaTipo === TALLA_TIPO.LIBRE && !talla) return;
 
-    const precioTotal = Number(precioManual);
+    const precioTotal = producto.precio;
     // Cuánto se cobra ahora: todo o un abono.
     const pagoInicial = tipoPago === "liquidacion" ? precioTotal : Number(montoAbono);
     if (tipoPago === "abono" && !(pagoInicial > 0 && pagoInicial <= precioTotal)) {
@@ -96,7 +98,6 @@ export default function ElementoPerfil() {
     setProductoId("");
     setTalla("");
     setColor("");
-    setPrecioManual("");
     setTipoPago("liquidacion");
     setMontoAbono("");
     setGuardandoPedido(false);
@@ -478,13 +479,6 @@ export default function ElementoPerfil() {
 
         {producto && (
           <>
-            <input
-              placeholder="Precio total"
-              type="number"
-              value={precioManual}
-              onChange={(e) => setPrecioManual(e.target.value)}
-            />
-
             <div className="inline-form">
               <label className="checkbox">
                 <input
@@ -493,7 +487,7 @@ export default function ElementoPerfil() {
                   checked={tipoPago === "liquidacion"}
                   onChange={() => setTipoPago("liquidacion")}
                 />
-                Liquidación (${precioManual || 0})
+                Liquidación (${producto.precio})
               </label>
               <label className="checkbox">
                 <input
