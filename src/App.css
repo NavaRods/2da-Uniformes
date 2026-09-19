@@ -759,3 +759,155 @@ th {
   border-color: var(--primary);
   color: var(--primary-contrast);
 }
+
+/* --- Mensualidad: selector de meses --- */
+.meses-anio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.meses-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.btn-toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* --- Perfil: resúmenes y pestañas --- */
+.resumenes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.resumenes .card {
+  margin: 0;
+}
+
+.resumen-cuotas {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--bg-elevated)), var(--bg-elevated));
+  border-color: var(--accent);
+}
+
+.resumen-cuotas h2 {
+  margin-top: 0;
+  color: var(--accent);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 20px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  flex: 1;
+  background: none;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-bottom: 3px solid transparent;
+  padding: 12px 8px;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--primary-soft);
+}
+
+.tab.activo {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* --- Mensualidad: cuadrícula de meses --- */
+.mes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+}
+
+.mes:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.mes-nombre {
+  font-weight: 700;
+}
+
+.mes-estado {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.mes.actual {
+  border-color: var(--accent);
+}
+
+.mes.elegido {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-contrast);
+}
+
+.mes.elegido .mes-estado {
+  color: var(--primary-contrast);
+}
+
+.mes.pagado {
+  background: var(--success-soft);
+  border-color: var(--success);
+  cursor: default;
+}
+
+.mes.pagado .mes-estado {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.mes:disabled {
+  opacity: 1;
+}
+
+.historial-cuotas {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.historial-cuotas li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.historial-cuotas li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.historial-cuotas li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.historial-cuotas .nota {
+  margin-top: 0;
+}

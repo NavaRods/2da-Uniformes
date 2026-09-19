@@ -59,6 +59,27 @@ service cloud.firestore {
         (!("entregado" in datos) || datos.entregado is bool);
       }
 
+      // --- Cuotas (mensualidades pagadas) de un elemento ---
+      function cuotaValida(datos) {
+        return datos.keys().hasOnly([
+          "tipo", "meses", "montoPorMes", "total", "quienRecibio",
+          "fecha", "fechaLocal", "horaLocal"
+        ]) &&
+        datos.tipo == "mensualidad" &&
+        datos.meses is list && datos.meses.size() > 0 &&
+        datos.montoPorMes is number && datos.montoPorMes > 0 &&
+        datos.total is number &&
+        datos.fechaLocal is string;
+      }
+
+      match /cuotas/{cuotaId} {
+        allow read: if esUsuarioAutorizado();
+        allow create: if esUsuarioAutorizado() && cuotaValida(request.resource.data);
+        // Un pago mal registrado se elimina y se vuelve a capturar; no se edita.
+        allow update: if false;
+        allow delete: if esUsuarioAutorizado();
+      }
+
       match /pedidos/{pedidoId} {
         allow read: if esUsuarioAutorizado();
         allow create, update: if esUsuarioAutorizado() && pedidoValido(request.resource.data);

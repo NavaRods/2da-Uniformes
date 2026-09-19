@@ -11,6 +11,8 @@ import {
 import { listenCatalogo, requiereTalla, TALLA_TIPO } from "../lib/catalogo";
 import { TURNOS, FUENTES, GRUPOS_ELEMENTO } from "../lib/opciones";
 import { useAuth } from "../auth/AuthContext";
+import CuotaMensualidad from "../components/CuotaMensualidad";
+import { listenCuotas, resumenCuotas, etiquetaMes } from "../lib/cuotas";
 import PedidoCard from "../components/PedidoCard";
 
 export default function ElementoPerfil() {
@@ -26,6 +28,8 @@ export default function ElementoPerfil() {
   const [montoAbono, setMontoAbono] = useState("");
   const [guardandoPedido, setGuardandoPedido] = useState(false);
   const [errorPedido, setErrorPedido] = useState("");
+  const [tab, setTab] = useState("uniformes"); // uniformes | cuotas | informacion
+  const [cuotas, setCuotas] = useState([]);
 
   const [editando, setEditando] = useState(false);
   const [formEdicion, setFormEdicion] = useState(null);
@@ -40,6 +44,7 @@ export default function ElementoPerfil() {
 
   useEffect(() => listenPedidosDeElemento(elementoId, setPedidos), [elementoId]);
   useEffect(() => listenCatalogo(setCatalogo), []);
+  useEffect(() => listenCuotas(elementoId, setCuotas), [elementoId]);
 
   const producto = catalogo.find((p) => p.id === productoId);
   const faltaTalla = requiereTalla(producto) && !talla.trim();
@@ -196,36 +201,86 @@ export default function ElementoPerfil() {
   const totalPagado = totalPedidos - totalAdeudado;
   const pendientesEntrega = pedidos.filter((p) => !p.entregado).length;
   const cambiosPendientes = pedidos.filter((p) => p.cambioPendiente).length;
+  const anioActual = new Date().getFullYear();
+  const resumenMens = resumenCuotas(cuotas, anioActual);
 
   return (
     <div className="page">
       <Link to="/elementos" className="volver">← Volver</Link>
       <h1>{elemento.nombre}</h1>
 
-      <div className="card resumen-uniformidad">
-        <h2>Uniformidad</h2>
-        <div className="ficha">
-          <div className="ficha-fila">
-            <span className="ficha-etiqueta">Pagado</span>
-            <span className="ficha-valor">${totalPagado}</span>
+      <div className="resumenes">
+        <div className="card resumen-uniformidad">
+          <h2>Uniformidad</h2>
+          <div className="ficha">
+            <div className="ficha-fila">
+              <span className="ficha-etiqueta">Pagado</span>
+              <span className="ficha-valor">${totalPagado}</span>
+            </div>
+            <div className="ficha-fila">
+              <span className="ficha-etiqueta">Adeudado</span>
+              <span className="ficha-valor">${totalAdeudado}</span>
+            </div>
+            <div className="ficha-fila">
+              <span className="ficha-etiqueta">Piezas por entregar</span>
+              <span className="ficha-valor">{pendientesEntrega}</span>
+            </div>
+            <div className="ficha-fila">
+              <span className="ficha-etiqueta">Cambios pendientes</span>
+              <span className="ficha-valor">{cambiosPendientes}</span>
+            </div>
           </div>
-          <div className="ficha-fila">
-            <span className="ficha-etiqueta">Adeudado</span>
-            <span className="ficha-valor">${totalAdeudado}</span>
-          </div>
-          <div className="ficha-fila">
-            <span className="ficha-etiqueta">Piezas por entregar</span>
-            <span className="ficha-valor">{pendientesEntrega}</span>
-          </div>
-          <div className="ficha-fila">
-            <span className="ficha-etiqueta">Cambios pendientes</span>
-            <span className="ficha-valor">{cambiosPendientes}</span>
+        </div>
+
+        <div className="card resumen-cuotas">
+          <h2>Cuotas</h2>
+          <div className="ficha">
+            <div className="ficha-fila">
+              <span className="ficha-etiqueta">Mensualidades {anioActual}</span>
+              <span className="ficha-valor">{resumenMens.mesesAnio} de 12</span>
+            </div>
+            <div className="ficha-fila">
+              <span className="ficha-etiqueta">Cobrado {anioActual}</span>
+              <span className="ficha-valor">${resumenMens.totalAnio}</span>
+            </div>
+            <div className="ficha-fila">
+              <span className="ficha-etiqueta">Último mes pagado</span>
+              <span className="ficha-valor">
+                {resumenMens.ultimoMes ? etiquetaMes(resumenMens.ultimoMes) : "—"}
+              </span>
+            </div>
+            <div className="ficha-fila">
+              <span className="ficha-etiqueta">Inscripción</span>
+              <span className="ficha-valor">
+                {elemento.pagaInscripcion ? "Pagada" : "Pendiente"}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <details className="card desplegable" open={editando}>
-        <summary>Información del elemento</summary>
+      <div className="tabs" role="tablist">
+        {[
+          ["uniformes", "Uniformes"],
+          ["cuotas", "Cuotas"],
+          ["informacion", "Información"],
+        ].map(([clave, etiqueta]) => (
+          <button
+            key={clave}
+            type="button"
+            role="tab"
+            aria-selected={tab === clave}
+            className={`tab ${tab === clave ? "activo" : ""}`}
+            onClick={() => setTab(clave)}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+
+      {tab === "informacion" && (
+      <div className="card">
+        <h2>Información del elemento</h2>
 
         {!editando && (
           <>
@@ -410,31 +465,31 @@ export default function ElementoPerfil() {
             </div>
           </form>
         )}
-      </details>
-
-      <div className="cuotas">
-        <button
-          type="button"
-          className={`btn-toggle ${elemento.pagaMensualidad ? "activo" : ""}`}
-          aria-pressed={!!elemento.pagaMensualidad}
-          onClick={() =>
-            actualizarElemento(elementoId, { pagaMensualidad: !elemento.pagaMensualidad })
-          }
-        >
-          Mensualidad
-        </button>
-        <button
-          type="button"
-          className={`btn-toggle ${elemento.pagaInscripcion ? "activo" : ""}`}
-          aria-pressed={!!elemento.pagaInscripcion}
-          onClick={() =>
-            actualizarElemento(elementoId, { pagaInscripcion: !elemento.pagaInscripcion })
-          }
-        >
-          Inscripción
-        </button>
       </div>
+      )}
 
+      {tab === "cuotas" && (
+        <>
+          <div className="card">
+            <h2>Inscripción</h2>
+            <button
+              type="button"
+              className={`btn-toggle ${elemento.pagaInscripcion ? "activo" : ""}`}
+              aria-pressed={!!elemento.pagaInscripcion}
+              onClick={() =>
+                actualizarElemento(elementoId, { pagaInscripcion: !elemento.pagaInscripcion })
+              }
+            >
+              {elemento.pagaInscripcion ? "✓ Inscripción pagada" : "Marcar inscripción como pagada"}
+            </button>
+          </div>
+
+          <CuotaMensualidad elemento={elemento} cuotas={cuotas} />
+        </>
+      )}
+
+      {tab === "uniformes" && (
+        <>
       <form onSubmit={onNuevoPedido} className="card">
         <h2>Nuevo pedido</h2>
         <select value={productoId} onChange={(e) => onSeleccionarProducto(e.target.value)}>
@@ -533,6 +588,8 @@ export default function ElementoPerfil() {
       {pedidos.map((p) => (
         <PedidoCard key={p.id} cliente={elemento} pedido={p} />
       ))}
+        </>
+      )}
     </div>
   );
 }
