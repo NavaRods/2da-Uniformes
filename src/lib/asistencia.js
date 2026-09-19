@@ -1,6 +1,7 @@
 import {
   doc,
-  setDoc,
+  writeBatch,
+  deleteField,
   onSnapshot,
   collection,
   query,
@@ -17,9 +18,47 @@ export function listenAsistenciaDia(fecha, callback) {
   });
 }
 
-export async function marcarAsistencia(fecha, elementoId, presente) {
-  const ref = doc(db, "asistencias", fecha);
-  await setDoc(ref, { [elementoId]: presente }, { merge: true });
+export const ESTADOS = [
+  ["asistencia", "Asistencia", "A"],
+  ["falta", "Falta", "F"],
+  ["justificada", "Falta justificada", "FJ"],
+  ["baja", "Baja", "B"],
+];
+
+// Fecha local (yyyy-mm-dd). toISOString usaría UTC y de noche daría el día siguiente.
+export function fechaLocal(d = new Date()) {
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
+// Los registros viejos guardaban true/false en lugar de un estado.
+export function normalizarEstado(valor) {
+  if (valor === true) return "asistencia";
+  if (valor === false) return "falta";
+  return valor || "";
+}
+
+// Un elemento dado de baja deja de aparecer en las listas posteriores a su
+// fecha de baja, pero sigue apareciendo ese día y en los anteriores.
+export function estaDeBaja(elemento, fecha) {
+  return !!elemento.fechaBaja && elemento.fechaBaja <= fecha;
+}
+
+export function visibleEnLista(elemento, fecha) {
+  return !elemento.fechaBaja || elemento.fechaBaja >= fecha;
+}
+
+export async function marcarAsistencia(fecha, elemento, estado) {
+  const batch = writeBatch(db);
+  batch.set(doc(db, "asistencias", fecha), { [elemento.id]: estado }, { merge: true });
+  if (estado === "baja") {
+    batch.update(doc(db, "elementos", elemento.id), { fechaBaja: fecha });
+  } else if (elemento.fechaBaja && elemento.fechaBaja <= fecha) {
+    // Se marcó otro estado en/después de la baja: se reactiva al elemento.
+    batch.update(doc(db, "elementos", elemento.id), { fechaBaja: deleteField() });
+  }
+  await batch.commit();
 }
 
 // Lista de asistencia de un mes completo (yyyy-mm), generada a demanda.

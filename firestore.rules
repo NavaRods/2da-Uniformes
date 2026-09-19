@@ -26,14 +26,15 @@ service cloud.firestore {
         "unidad", "grupo", "nombre", "edad", "telefonos", "direccion",
         "fechaNacimiento", "escuela", "turno", "gradoEscolar", "tutor",
         "comoSeEntero", "seguroSocial", "alergias", "pagaMensualidad",
-        "pagaInscripcion", "documentacionEntregada", "creadoEn"
+        "pagaInscripcion", "documentacionEntregada", "fechaBaja", "creadoEn"
       ]) &&
       datos.nombre is string && datos.nombre.size() > 0 &&
       (!("grupo" in datos) || datos.grupo is string) &&
       (!("telefonos" in datos) || datos.telefonos is list) &&
       (!("pagaMensualidad" in datos) || datos.pagaMensualidad is bool) &&
       (!("pagaInscripcion" in datos) || datos.pagaInscripcion is bool) &&
-      (!("documentacionEntregada" in datos) || datos.documentacionEntregada is bool);
+      (!("documentacionEntregada" in datos) || datos.documentacionEntregada is bool) &&
+      (!("fechaBaja" in datos) || datos.fechaBaja is string);
     }
 
     match /elementos/{elementoId} {

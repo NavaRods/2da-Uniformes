@@ -1,45 +1,94 @@
 import { useEffect, useState } from "react";
 import { listenElementos } from "../lib/elementos";
-import { listenAsistenciaDia, marcarAsistencia } from "../lib/asistencia";
-
-function hoy() {
-  return new Date().toISOString().slice(0, 10);
-}
+import {
+  ESTADOS,
+  fechaLocal,
+  listenAsistenciaDia,
+  marcarAsistencia,
+  normalizarEstado,
+  estaDeBaja,
+  visibleEnLista,
+} from "../lib/asistencia";
 
 export default function Asistencia() {
   const [elementos, setElementos] = useState([]);
-  const [fecha, setFecha] = useState(hoy());
+  const [fecha, setFecha] = useState(fechaLocal());
   const [asistencia, setAsistencia] = useState({});
+  const [busqueda, setBusqueda] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => listenElementos(setElementos), []);
   useEffect(() => listenAsistenciaDia(fecha, setAsistencia), [fecha]);
 
+  async function cambiar(el, estado) {
+    setError("");
+    try {
+      await marcarAsistencia(fecha, el, estado);
+    } catch {
+      setError("No se pudo guardar. Verifica tu conexión e inténtalo de nuevo.");
+    }
+  }
+
+  // Sin búsqueda: solo la lista del día (sin las bajas anteriores).
+  // Con búsqueda: se consulta a todos, incluidas las bajas.
+  const termino = busqueda.trim().toLowerCase();
+  const visibles = elementos.filter((el) =>
+    termino
+      ? el.nombre.toLowerCase().includes(termino)
+      : visibleEnLista(el, fecha)
+  );
+
   return (
     <div className="page">
       <h1>Asistencia</h1>
-      <input
-        type="date"
-        value={fecha}
-        onChange={(e) => setFecha(e.target.value)}
-      />
+      <div className="asistencia-controles">
+        <input
+          type="date"
+          value={fecha}
+          max={fechaLocal()}
+          onChange={(e) => e.target.value && setFecha(e.target.value)}
+        />
+        <input
+          type="search"
+          placeholder="Buscar elemento (incluye bajas)..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
+      </div>
+      {error && <p className="error">{error}</p>}
 
       <ul className="lista">
-        {elementos.map((el) => (
-          <li key={el.id} className="asistencia-row">
-            <span>{el.nombre}</span>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={!!asistencia[el.id]}
-                onChange={(e) =>
-                  marcarAsistencia(fecha, el.id, e.target.checked)
-                }
-              />
-              Presente
-            </label>
-          </li>
-        ))}
+        {visibles.map((el) => {
+          const baja = estaDeBaja(el, fecha);
+          const estado = baja ? "baja" : normalizarEstado(asistencia[el.id]);
+          return (
+            <li key={el.id} className="asistencia-row">
+              <span>
+                {el.nombre}
+                {el.fechaBaja && (
+                  <span className="tag tag-baja">Baja {el.fechaBaja}</span>
+                )}
+              </span>
+              <select
+                value={estado}
+                onChange={(e) => cambiar(el, e.target.value)}
+                className={`estado estado-${estado || "sin"}`}
+                aria-label={`Estado de ${el.nombre}`}
+              >
+                <option value="" disabled>
+                  Sin marcar
+                </option>
+                {ESTADOS.map(([valor, etiqueta]) => (
+                  <option key={valor} value={valor}>
+                    {etiqueta}
+                  </option>
+                ))}
+              </select>
+            </li>
+          );
+        })}
       </ul>
+      {visibles.length === 0 && <p className="nota">No hay elementos.</p>}
     </div>
   );
 }

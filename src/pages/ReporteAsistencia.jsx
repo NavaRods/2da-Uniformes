@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
 import { listenElementos } from "../lib/elementos";
-import { obtenerAsistenciasMes } from "../lib/asistencia";
+import {
+  ESTADOS,
+  fechaLocal,
+  normalizarEstado,
+  obtenerAsistenciasMes,
+} from "../lib/asistencia";
+
+const ABREVIATURA = Object.fromEntries(ESTADOS.map(([v, , abr]) => [v, abr]));
 
 function mesActual() {
-  return new Date().toISOString().slice(0, 7);
+  return fechaLocal().slice(0, 7);
 }
 
 export default function ReporteAsistencia() {
@@ -43,11 +50,14 @@ export default function ReporteAsistencia() {
               </tr>
             </thead>
             <tbody>
-              {elementos.map((el) => (
+              {elementos
+                // Las bajas de meses anteriores ya no forman parte de la lista.
+                .filter((el) => !el.fechaBaja || el.fechaBaja >= `${mes}-01`)
+                .map((el) => (
                 <tr key={el.id}>
                   <td>{el.nombre}</td>
                   {dias.map((d) => (
-                    <td key={d}>{datos[d][el.id] ? "✓" : ""}</td>
+                    <td key={d}>{ABREVIATURA[normalizarEstado(datos[d][el.id])] || ""}</td>
                   ))}
                 </tr>
               ))}
