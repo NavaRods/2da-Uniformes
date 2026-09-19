@@ -26,6 +26,8 @@ service cloud.firestore {
         "unidad", "grupo", "nombre", "edad", "telefonos", "direccion",
         "fechaNacimiento", "escuela", "turno", "gradoEscolar", "tutor",
         "comoSeEntero", "seguroSocial", "alergias", "pagaMensualidad",
+        // documentacionEntregada ya no se usa; se permite solo para no rechazar
+        // elementos antiguos que todavía lo tengan guardado.
         "pagaInscripcion", "documentacionEntregada", "fechaBaja", "creadoEn"
       ]) &&
       datos.nombre is string && datos.nombre.size() > 0 &&

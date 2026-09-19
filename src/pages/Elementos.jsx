@@ -42,7 +42,6 @@ export default function Elementos() {
               <span>{el.nombre}</span>
               <span className="etiquetas">
                 <span className="tag">{el.grupo}</span>
-                {el.documentacionEntregada && <span className="tag">📄</span>}
                 {el.pagaMensualidad && <span className="tag" title="Paga mensualidad">💳</span>}
                 {el.pagaInscripcion && <span className="tag" title="Paga inscripción">🎟️</span>}
               </span>

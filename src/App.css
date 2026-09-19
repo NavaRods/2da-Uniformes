@@ -734,3 +734,28 @@ th {
 .acciones-pedido > button {
   flex: 1;
 }
+
+/* --- Cuotas: botones Mensualidad / Inscripción --- */
+.cuotas {
+  display: flex;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.btn-toggle {
+  flex: 1;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+}
+
+.btn-toggle:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.btn-toggle.activo {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-contrast);
+}

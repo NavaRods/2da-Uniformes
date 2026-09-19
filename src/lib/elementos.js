@@ -37,17 +37,10 @@ export async function crearElemento(datos) {
     alergias: datos.alergias || "",
     pagaMensualidad: !!datos.pagaMensualidad,
     pagaInscripcion: !!datos.pagaInscripcion,
-    documentacionEntregada: false,
     creadoEn: serverTimestamp(),
   });
 }
 
 export async function actualizarElemento(elementoId, cambios) {
   return updateDoc(doc(db, "elementos", elementoId), cambios);
-}
-
-export async function marcarDocumentacion(elementoId, entregada) {
-  return updateDoc(doc(db, "elementos", elementoId), {
-    documentacionEntregada: entregada,
-  });
 }

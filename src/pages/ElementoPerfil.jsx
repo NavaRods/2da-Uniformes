@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
-import { marcarDocumentacion, actualizarElemento } from "../lib/elementos";
+import { actualizarElemento } from "../lib/elementos";
 import {
   listenPedidosDeElemento,
   crearPedido,
@@ -412,39 +412,28 @@ export default function ElementoPerfil() {
         )}
       </details>
 
-      <details className="card desplegable">
-        <summary>Pagos de cuota</summary>
-        <div className="desplegable-contenido">
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={!!elemento.documentacionEntregada}
-              onChange={(e) => marcarDocumentacion(elementoId, e.target.checked)}
-            />
-            Documentación entregada (acta, CURP, etc. vía Google Form)
-          </label>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={!!elemento.pagaMensualidad}
-              onChange={(e) =>
-                actualizarElemento(elementoId, { pagaMensualidad: e.target.checked })
-              }
-            />
-            Paga mensualidad
-          </label>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={!!elemento.pagaInscripcion}
-              onChange={(e) =>
-                actualizarElemento(elementoId, { pagaInscripcion: e.target.checked })
-              }
-            />
-            Paga inscripción
-          </label>
-        </div>
-      </details>
+      <div className="cuotas">
+        <button
+          type="button"
+          className={`btn-toggle ${elemento.pagaMensualidad ? "activo" : ""}`}
+          aria-pressed={!!elemento.pagaMensualidad}
+          onClick={() =>
+            actualizarElemento(elementoId, { pagaMensualidad: !elemento.pagaMensualidad })
+          }
+        >
+          Mensualidad
+        </button>
+        <button
+          type="button"
+          className={`btn-toggle ${elemento.pagaInscripcion ? "activo" : ""}`}
+          aria-pressed={!!elemento.pagaInscripcion}
+          onClick={() =>
+            actualizarElemento(elementoId, { pagaInscripcion: !elemento.pagaInscripcion })
+          }
+        >
+          Inscripción
+        </button>
+      </div>
 
       <form onSubmit={onNuevoPedido} className="card">
         <h2>Nuevo pedido</h2>

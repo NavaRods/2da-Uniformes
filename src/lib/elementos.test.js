@@ -22,7 +22,7 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../firebase", () => ({ db: {} }));
 
-const { crearElemento, marcarDocumentacion, actualizarElemento } = await import(
+const { crearElemento, actualizarElemento } = await import(
   "./elementos"
 );
 
@@ -32,13 +32,13 @@ beforeEach(() => {
 });
 
 describe("crearElemento", () => {
-  it("aplica valores por defecto (unidad, grupo, documentación) cuando no se envían", async () => {
+  it("aplica valores por defecto (unidad, grupo) cuando no se envían", async () => {
     await crearElemento({ nombre: "Juan Pérez" });
     const [, datos] = addDoc.mock.calls[0];
     expect(datos.nombre).toBe("Juan Pérez");
     expect(datos.unidad).toBe("2da Unidad");
     expect(datos.grupo).toBe("Varonil");
-    expect(datos.documentacionEntregada).toBe(false);
+    expect(datos).not.toHaveProperty("documentacionEntregada");
     expect(datos.telefonos).toEqual([]);
   });
 
@@ -46,14 +46,6 @@ describe("crearElemento", () => {
     await crearElemento({ nombre: "Ana", telefonos: ["555", "", "666"] });
     const [, datos] = addDoc.mock.calls[0];
     expect(datos.telefonos).toEqual(["555", "666"]);
-  });
-});
-
-describe("marcarDocumentacion", () => {
-  it("actualiza solo el campo documentacionEntregada", async () => {
-    await marcarDocumentacion("el1", true);
-    const [, datos] = updateDoc.mock.calls[0];
-    expect(datos).toEqual({ documentacionEntregada: true });
   });
 });
 
