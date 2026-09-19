@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listenElementos } from "../lib/elementos";
+import { buscar } from "../lib/busqueda";
 import FormElemento from "../components/FormElemento";
 import {
   ESTADOS,
@@ -33,12 +34,9 @@ export default function Asistencia() {
 
   // Sin búsqueda: solo la lista del día (sin las bajas anteriores).
   // Con búsqueda: se consulta a todos, incluidas las bajas.
-  const termino = busqueda.trim().toLowerCase();
-  const visibles = elementos.filter((el) =>
-    termino
-      ? el.nombre.toLowerCase().includes(termino)
-      : visibleEnLista(el, fecha)
-  );
+  const visibles = busqueda.trim()
+    ? buscar(elementos, busqueda, (el) => el.nombre)
+    : elementos.filter((el) => visibleEnLista(el, fecha));
 
   return (
     <div className="page">
