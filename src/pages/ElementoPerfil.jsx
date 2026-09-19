@@ -89,10 +89,12 @@ export default function ElementoPerfil() {
         talla,
         color,
         cantidad: 1,
+        unidad: elemento.unidad,
       });
       await registrarAbono(elementoId, pedidoRef.id, {
         monto: pagoInicial,
         quienRecibio: user?.displayName || user?.email,
+        unidad: elemento.unidad,
       });
     } catch {
       setErrorPedido("No se pudo guardar el pedido. Verifica tu conexión e inténtalo de nuevo.");

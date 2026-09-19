@@ -40,6 +40,7 @@ export default function CuotaMensualidad({ elemento, cuotas }) {
         meses: seleccion,
         montoPorMes: precioNum,
         quienRecibio: user?.displayName || user?.email,
+        unidad: elemento.unidad,
       });
       if (!elemento.pagaMensualidad) {
         await actualizarElemento(elemento.id, { pagaMensualidad: true });

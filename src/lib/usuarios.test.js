@@ -8,9 +8,11 @@ const doc = vi.fn((...args) => ({ __type: "doc", path: args.slice(1) }));
 const query = vi.fn((ref) => ref);
 const orderBy = vi.fn();
 const onSnapshot = vi.fn();
+const getDoc = vi.fn(async () => ({ exists: () => false }));
 
 vi.mock("firebase/firestore", () => ({
   collection: (...args) => collection(...args),
+  getDoc: (...args) => getDoc(...args),
   setDoc: (...args) => setDoc(...args),
   updateDoc: (...args) => updateDoc(...args),
   deleteDoc: vi.fn(),
@@ -31,6 +33,7 @@ beforeEach(() => {
   setDoc.mockClear();
   updateDoc.mockClear();
   doc.mockClear();
+  getDoc.mockClear();
 });
 
 describe("normalizarCorreo", () => {
@@ -83,5 +86,15 @@ describe("cambiarActivo", () => {
     await cambiarActivo("op@club.com", false);
     const [, datos] = updateDoc.mock.calls[0];
     expect(datos).toEqual({ activo: false });
+  });
+});
+
+describe("crearUsuario con un correo que ya existe", () => {
+  it("no pisa al usuario existente y avisa con un código propio", async () => {
+    getDoc.mockResolvedValueOnce({ exists: () => true });
+    await expect(
+      crearUsuario({ correo: "Ana@x.com", nombre: "Ana", rol: "operador", unidad: "U1" })
+    ).rejects.toMatchObject({ code: "ya-existe" });
+    expect(setDoc).not.toHaveBeenCalled();
   });
 });

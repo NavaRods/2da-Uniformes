@@ -4,16 +4,70 @@
       "collectionGroup": "elementos",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "unidad", "order": "ASCENDING" },
-        { "fieldPath": "nombre", "order": "ASCENDING" }
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nombre",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "porUnidad",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        { "fieldPath": "unidad", "order": "ASCENDING" },
-        { "fieldPath": "fecha", "order": "ASCENDING" }
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fecha",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "abonos",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fechaLocal",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "cuotas",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fechaLocal",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "pedidos",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "cambioPendiente",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],

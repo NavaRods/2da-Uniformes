@@ -31,6 +31,8 @@ const FILTROS = [
 export default function RelacionPagos() {
   const { perfil } = useAuth();
   const esAdmin = perfil?.rol === "admin";
+  // El Admin ve todas las Unidades; el Operador, solo la suya.
+  const unidadFiltro = esAdmin ? undefined : perfil?.unidad;
   const [fecha, setFecha] = useState(fechaLocalISO());
   const [abonos, setAbonos] = useState([]);
   const [cuotas, setCuotas] = useState([]);
@@ -77,7 +79,8 @@ export default function RelacionPagos() {
         setAbonos(datos);
         setCargado((c) => ({ ...c, abonos: true }));
       },
-      alFallar
+      alFallar,
+      unidadFiltro
     );
     const dejarCuotas = listenCuotasDelDia(
       fecha,
@@ -85,15 +88,19 @@ export default function RelacionPagos() {
         setCuotas(datos);
         setCargado((c) => ({ ...c, cuotas: true }));
       },
-      alFallar
+      alFallar,
+      unidadFiltro
     );
     return () => {
       dejarAbonos();
       dejarCuotas();
     };
-  }, [fecha]);
+  }, [fecha, unidadFiltro]);
 
-  useEffect(() => listenCambiosPendientes(setCambiosPendientes), []);
+  useEffect(
+    () => listenCambiosPendientes(setCambiosPendientes, undefined, unidadFiltro),
+    [unidadFiltro]
+  );
   useEffect(() => listenConfiguracion(setConfig, () => setConfig({})), []);
 
   useEffect(() => {

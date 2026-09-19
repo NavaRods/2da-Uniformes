@@ -109,10 +109,12 @@ export default function Uniformidad() {
         talla: item.talla,
         color: item.color,
         cantidad: 1,
+        unidad: elementoSeleccionado.unidad,
       });
       await registrarAbono(elementoSeleccionado.id, pedidoRef.id, {
         monto: item.monto,
         quienRecibio: user?.displayName || user?.email,
+        unidad: elementoSeleccionado.unidad,
       });
     }
 
@@ -308,9 +310,11 @@ export default function Uniformidad() {
       )}
 
       <p style={{ marginTop: 24 }}>
-        <Link to="/catalogo" className="volver">
-          Administrar catálogo de productos →
-        </Link>
+        {esAdmin && (
+          <Link to="/catalogo" className="volver">
+            Administrar catálogo de productos →
+          </Link>
+        )}
       </p>
     </div>
   );

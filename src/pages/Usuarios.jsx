@@ -8,10 +8,16 @@ import {
   ROLES,
 } from "../lib/usuarios";
 import { listenUnidades, crearUnidad } from "../lib/unidades";
+import { migrarDatosAnteriores } from "../lib/migracion";
+import { useAuth } from "../auth/AuthContext";
 
 const FORM_VACIO = { correo: "", nombre: "", rol: "operador", unidad: "", grado: "" };
 
 export default function Usuarios() {
+  const { user } = useAuth();
+  const yo = (user?.email || "").toLowerCase();
+  const [migrando, setMigrando] = useState(false);
+  const [resultadoMigracion, setResultadoMigracion] = useState("");
   const [usuarios, setUsuarios] = useState([]);
   const [unidades, setUnidades] = useState([]);
   const [form, setForm] = useState(FORM_VACIO);
@@ -63,10 +69,39 @@ export default function Usuarios() {
         await crearUsuario(form);
       }
       cancelar();
-    } catch {
-      setError("No se pudo guardar. Verifica tu conexión e inténtalo de nuevo.");
+    } catch (e) {
+      setError(
+        e?.code === "ya-existe"
+          ? "Ese correo ya tiene acceso. Búscalo en la lista y usa Editar."
+          : "No se pudo guardar. Verifica tu conexión e inténtalo de nuevo."
+      );
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function onMigrar() {
+    if (
+      !confirm(
+        "Esto actualiza datos creados antes de las Unidades (pedidos, pagos, mensualidades y asistencia anterior). No borra nada que no se haya copiado y se puede repetir sin problema. ¿Continuar?"
+      )
+    ) {
+      return;
+    }
+    setMigrando(true);
+    setResultadoMigracion("");
+    try {
+      const r = await migrarDatosAnteriores();
+      setResultadoMigracion(
+        `Listo. Actualizados: ${r.pedidos} pedidos, ${r.abonos} abonos, ${r.cuotas} mensualidades. ` +
+          `Días de asistencia anterior migrados: ${r.asistencias}` +
+          (r.omitidos ? ` (${r.omitidos} registros sin Unidad se dejaron sin tocar).` : ".")
+      );
+    } catch (e) {
+      console.error("Migración:", e);
+      setResultadoMigracion("No se pudo completar la actualización. Inténtalo de nuevo; lo ya hecho no se repite.");
+    } finally {
+      setMigrando(false);
     }
   }
 
@@ -225,18 +260,35 @@ export default function Usuarios() {
                 <button className="btn-secondary btn-small" onClick={() => iniciarEdicion(u)}>
                   Editar
                 </button>
-                <button className="btn-secondary btn-small" onClick={() => onCambiarActivo(u)}>
-                  {activo ? "Desactivar" : "Activar"}
-                </button>
-                <button className="btn-secondary btn-small" onClick={() => onEliminar(u.id)}>
-                  Quitar
-                </button>
+                {/* Nadie se quita el acceso a sí mismo: así siempre queda un Admin. */}
+                {u.id !== yo && (
+                  <>
+                    <button className="btn-secondary btn-small" onClick={() => onCambiarActivo(u)}>
+                      {activo ? "Desactivar" : "Activar"}
+                    </button>
+                    <button className="btn-secondary btn-small" onClick={() => onEliminar(u.id)}>
+                      Quitar
+                    </button>
+                  </>
+                )}
               </span>
             </li>
           );
         })}
         {usuarios.length === 0 && <p>Sin usuarios todavía.</p>}
       </ul>
+
+      <div className="card">
+        <h2>Mantenimiento</h2>
+        <p className="nota">
+          Si la app tenía datos antes de que existieran las Unidades, este botón les asigna la de su
+          elemento y pasa la asistencia anterior al formato nuevo. Solo hace falta una vez.
+        </p>
+        <button className="btn-secondary" onClick={onMigrar} disabled={migrando}>
+          {migrando ? "Actualizando..." : "Actualizar datos anteriores"}
+        </button>
+        {resultadoMigracion && <p className="nota">{resultadoMigracion}</p>}
+      </div>
     </div>
   );
 }

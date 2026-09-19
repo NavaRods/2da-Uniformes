@@ -30,10 +30,11 @@ export function listenPedidosDeElemento(elementoId, callback) {
 // leer el nombre del elemento.
 export async function crearPedido(
   elementoId,
-  { articulo, precioTotal, productoNombre, talla, color, cantidad }
+  { articulo, precioTotal, productoNombre, talla, color, cantidad, unidad }
 ) {
   const ref = collection(db, "elementos", elementoId, "pedidos");
   return addDoc(ref, {
+    unidad,
     articulo,
     productoNombre: productoNombre || articulo,
     talla: talla || "",
@@ -112,7 +113,7 @@ export function listenAbonosDePedido(elementoId, pedidoId, callback) {
 export async function registrarAbono(
   elementoId,
   pedidoId,
-  { monto, quienRecibio }
+  { monto, quienRecibio, unidad }
 ) {
   const abonosRef = collection(
     db,
@@ -123,6 +124,7 @@ export async function registrarAbono(
     "abonos"
   );
   await addDoc(abonosRef, {
+    unidad,
     monto: Number(monto),
     quienRecibio: quienRecibio || "",
     fecha: serverTimestamp(),
@@ -140,9 +142,11 @@ export async function registrarAbono(
 // elemento) y la "Relación de pagos General" (agregada, sin datos del
 // elemento). collectionGroup permite consultar todos los subcollections
 // "abonos" sin importar bajo qué elemento/pedido estén.
-export function listenAbonosDelDia(fechaLocal, callback, onError) {
+// Con `unidad` (Operador) solo trae los de esa Unidad; sin ella (Admin), todos.
+export function listenAbonosDelDia(fechaLocal, callback, onError, unidad) {
   const ref = collectionGroup(db, "abonos");
-  const q = query(ref, where("fechaLocal", "==", fechaLocal));
+  const filtros = unidad ? [where("unidad", "==", unidad)] : [];
+  const q = query(ref, ...filtros, where("fechaLocal", "==", fechaLocal));
   return onSnapshot(q, (snap) => {
     callback(
       snap.docs.map((d) => ({
@@ -157,9 +161,10 @@ export function listenAbonosDelDia(fechaLocal, callback, onError) {
 
 // Todos los pedidos con un cambio de pieza pendiente (sin importar el día),
 // para que no se pierdan de vista hasta que se resuelvan.
-export function listenCambiosPendientes(callback, onError) {
+export function listenCambiosPendientes(callback, onError, unidad) {
   const ref = collectionGroup(db, "pedidos");
-  const q = query(ref, where("cambioPendiente", "==", true));
+  const filtros = unidad ? [where("unidad", "==", unidad)] : [];
+  const q = query(ref, ...filtros, where("cambioPendiente", "==", true));
   return onSnapshot(q, (snap) => {
     callback(
       snap.docs.map((d) => ({

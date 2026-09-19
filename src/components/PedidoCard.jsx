@@ -42,6 +42,7 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
     await registrarAbono(elemento.id, pedido.id, {
       monto,
       quienRecibio: quien,
+      unidad: elemento.unidad,
     });
 
     const saldoPendiente = pedido.saldoPendiente - Number(monto);

@@ -73,8 +73,9 @@ export function listenCuotas(elementoId, callback) {
 
 // Todas las mensualidades cobradas en un día (de cualquier elemento), para la
 // Relación de pagos.
-export function listenCuotasDelDia(fecha, callback, onError) {
-  const q = query(collectionGroup(db, "cuotas"), where("fechaLocal", "==", fecha));
+export function listenCuotasDelDia(fecha, callback, onError, unidad) {
+  const filtros = unidad ? [where("unidad", "==", unidad)] : [];
+  const q = query(collectionGroup(db, "cuotas"), ...filtros, where("fechaLocal", "==", fecha));
   return onSnapshot(q, (snap) => {
     callback(
       snap.docs.map((d) => ({
@@ -86,10 +87,11 @@ export function listenCuotasDelDia(fecha, callback, onError) {
   }, onError);
 }
 
-export async function registrarMensualidad(elementoId, { meses, montoPorMes, quienRecibio }) {
+export async function registrarMensualidad(elementoId, { meses, montoPorMes, quienRecibio, unidad }) {
   const ordenados = [...meses].sort();
   const monto = Number(montoPorMes);
   return addDoc(collection(db, "elementos", elementoId, "cuotas"), {
+    unidad,
     tipo: "mensualidad",
     meses: ordenados,
     montoPorMes: monto,

@@ -1,5 +1,6 @@
 import {
   collection,
+  getDoc,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -37,7 +38,12 @@ export function listenUsuario(correo, callback, onError) {
 }
 
 export async function crearUsuario({ correo, nombre, rol, unidad, grado }) {
-  return setDoc(doc(db, "usuarios", normalizarCorreo(correo)), {
+  const ref = doc(db, "usuarios", normalizarCorreo(correo));
+  // setDoc pisaría a un usuario existente (rol, Unidad, etc.) sin avisar.
+  if ((await getDoc(ref)).exists()) {
+    throw Object.assign(new Error("El correo ya tiene acceso"), { code: "ya-existe" });
+  }
+  return setDoc(ref, {
     nombre: nombre || "",
     rol,
     unidad: rol === "admin" ? null : unidad,
