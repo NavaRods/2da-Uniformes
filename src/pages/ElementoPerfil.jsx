@@ -3,13 +3,19 @@ import { useParams, Link } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { marcarDocumentacion, actualizarElemento } from "../lib/elementos";
-import { listenPedidosDeElemento, crearPedido } from "../lib/pedidos";
+import {
+  listenPedidosDeElemento,
+  crearPedido,
+  registrarAbono,
+} from "../lib/pedidos";
 import { listenCatalogo, TALLA_TIPO } from "../lib/catalogo";
 import { TURNOS, FUENTES, GRUPOS_ELEMENTO } from "../lib/opciones";
+import { useAuth } from "../auth/AuthContext";
 import PedidoCard from "../components/PedidoCard";
 
 export default function ElementoPerfil() {
   const { elementoId } = useParams();
+  const { user } = useAuth();
   const [elemento, setElemento] = useState(null);
   const [pedidos, setPedidos] = useState([]);
   const [catalogo, setCatalogo] = useState([]);
@@ -17,6 +23,10 @@ export default function ElementoPerfil() {
   const [talla, setTalla] = useState("");
   const [color, setColor] = useState("");
   const [precioManual, setPrecioManual] = useState("");
+  const [tipoPago, setTipoPago] = useState("liquidacion"); // liquidacion | abono
+  const [montoAbono, setMontoAbono] = useState("");
+  const [guardandoPedido, setGuardandoPedido] = useState(false);
+  const [errorPedido, setErrorPedido] = useState("");
 
   const [editando, setEditando] = useState(false);
   const [formEdicion, setFormEdicion] = useState(null);
@@ -40,6 +50,8 @@ export default function ElementoPerfil() {
     setTalla("");
     setColor(p?.colores?.[0] || "");
     setPrecioManual(p ? String(p.precio) : "");
+    setTipoPago("liquidacion");
+    setMontoAbono("");
   }
 
   async function onNuevoPedido(e) {
@@ -48,23 +60,46 @@ export default function ElementoPerfil() {
     if (producto.tallaTipo === TALLA_TIPO.LISTA && !talla) return;
     if (producto.tallaTipo === TALLA_TIPO.LIBRE && !talla) return;
 
+    const precioTotal = Number(precioManual);
+    // Cuánto se cobra ahora: todo o un abono.
+    const pagoInicial = tipoPago === "liquidacion" ? precioTotal : Number(montoAbono);
+    if (tipoPago === "abono" && !(pagoInicial > 0 && pagoInicial <= precioTotal)) {
+      setErrorPedido("El abono debe ser mayor a $0 y no mayor al precio total.");
+      return;
+    }
+
     const partes = [producto.nombre];
     if (color) partes.push(color);
     if (talla) partes.push(`talla ${talla}`);
 
-    await crearPedido(elementoId, {
-      articulo: partes.join(" — "),
-      precioTotal: precioManual,
-      productoNombre: producto.nombre,
-      talla,
-      color,
-      cantidad: 1,
-    });
+    setGuardandoPedido(true);
+    setErrorPedido("");
+    try {
+      const pedidoRef = await crearPedido(elementoId, {
+        articulo: partes.join(" — "),
+        precioTotal,
+        productoNombre: producto.nombre,
+        talla,
+        color,
+        cantidad: 1,
+      });
+      await registrarAbono(elementoId, pedidoRef.id, {
+        monto: pagoInicial,
+        quienRecibio: user?.displayName || user?.email,
+      });
+    } catch {
+      setErrorPedido("No se pudo guardar el pedido. Verifica tu conexión e inténtalo de nuevo.");
+      setGuardandoPedido(false);
+      return;
+    }
 
     setProductoId("");
     setTalla("");
     setColor("");
     setPrecioManual("");
+    setTipoPago("liquidacion");
+    setMontoAbono("");
+    setGuardandoPedido(false);
   }
 
   function iniciarEdicion() {
@@ -442,16 +477,50 @@ export default function ElementoPerfil() {
         )}
 
         {producto && (
-          <input
-            placeholder="Precio total"
-            type="number"
-            value={precioManual}
-            onChange={(e) => setPrecioManual(e.target.value)}
-          />
+          <>
+            <input
+              placeholder="Precio total"
+              type="number"
+              value={precioManual}
+              onChange={(e) => setPrecioManual(e.target.value)}
+            />
+
+            <div className="inline-form">
+              <label className="checkbox">
+                <input
+                  type="radio"
+                  name="tipoPago"
+                  checked={tipoPago === "liquidacion"}
+                  onChange={() => setTipoPago("liquidacion")}
+                />
+                Liquidación (${precioManual || 0})
+              </label>
+              <label className="checkbox">
+                <input
+                  type="radio"
+                  name="tipoPago"
+                  checked={tipoPago === "abono"}
+                  onChange={() => setTipoPago("abono")}
+                />
+                Abono
+              </label>
+            </div>
+
+            {tipoPago === "abono" && (
+              <input
+                placeholder="Monto del abono"
+                type="number"
+                value={montoAbono}
+                onChange={(e) => setMontoAbono(e.target.value)}
+              />
+            )}
+          </>
         )}
 
-        <button type="submit" className="btn-primary" disabled={!producto}>
-          Agregar pedido
+        {errorPedido && <p className="error">{errorPedido}</p>}
+
+        <button type="submit" className="btn-primary" disabled={!producto || guardandoPedido}>
+          {guardandoPedido ? "Guardando..." : "Agregar pedido"}
         </button>
       </form>
 
