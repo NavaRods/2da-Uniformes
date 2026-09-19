@@ -11,7 +11,7 @@ const SECCIONES = [
 export default function Inicio() {
   return (
     <div className="page">
-      <h1>Uniformes Club</h1>
+      <h1>Uniformes</h1>
       <div className="inicio-grid">
         {SECCIONES.map(([to, icono, titulo, detalle]) => (
           <Link key={to} to={to} className="inicio-card">

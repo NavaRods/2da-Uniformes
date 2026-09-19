@@ -9,7 +9,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg"],
       manifest: {
-        name: "Uniformes Club",
+        name: "Uniformes",
         short_name: "Uniformes",
         start_url: "/",
         display: "standalone",

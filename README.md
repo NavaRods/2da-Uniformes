@@ -1,4 +1,4 @@
-# Uniformes Club — App interna
+# Uniformes — App interna
 
 App privada (PWA) para gestionar clientes, pagos de uniformes, asistencia y
 documentación del club. Pensada para funcionar sin internet: los datos se
