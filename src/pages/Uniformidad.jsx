@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listenElementos } from "../lib/elementos";
-import { listenCatalogo, TALLA_TIPO } from "../lib/catalogo";
+import { listenCatalogo, requiereTalla, TALLA_TIPO } from "../lib/catalogo";
 import { crearPedido, registrarAbono } from "../lib/pedidos";
 import { linkWhatsapp } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
@@ -28,6 +28,7 @@ export default function Uniformidad() {
   useEffect(() => listenCatalogo(setCatalogo), []);
 
   const producto = catalogo.find((p) => p.id === productoId);
+  const faltaTalla = requiereTalla(producto) && !talla.trim();
 
   function onSeleccionarProducto(id) {
     setProductoId(id);
@@ -62,7 +63,7 @@ export default function Uniformidad() {
 
   function agregarAlCarrito() {
     if (!producto || !monto) return;
-    if (producto.tallaTipo !== TALLA_TIPO.NINGUNA && !talla) return;
+    if (faltaTalla) return;
 
     const partes = [producto.nombre];
     if (color) partes.push(color);
@@ -259,7 +260,11 @@ export default function Uniformidad() {
                   />
                 )}
 
-                <button className="btn-primary" onClick={agregarAlCarrito}>
+                <button
+                  className="btn-primary"
+                  onClick={agregarAlCarrito}
+                  disabled={faltaTalla}
+                >
                   + Agregar a la venta
                 </button>
               </>

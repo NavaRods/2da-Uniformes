@@ -21,6 +21,15 @@ export const TALLA_TIPO = {
   NINGUNA: "ninguna",
 };
 
+// ¿Hay que capturar talla para vender este producto? Sí si es a la medida, o
+// si es de lista y la lista tiene opciones (con la lista vacía no habría nada
+// que elegir y la venta quedaría bloqueada).
+export function requiereTalla(producto) {
+  if (!producto) return false;
+  if (producto.tallaTipo === TALLA_TIPO.LIBRE) return true;
+  return producto.tallaTipo === TALLA_TIPO.LISTA && (producto.tallas?.length ?? 0) > 0;
+}
+
 function rango1a10() {
   return Array.from({ length: 10 }, (_, i) => String(i + 1));
 }

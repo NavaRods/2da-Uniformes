@@ -31,8 +31,14 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../firebase", () => ({ db: {} }));
 
-const { crearProducto, agregarTalla, eliminarProducto, vaciarCatalogo, TALLA_TIPO } =
-  await import("./catalogo");
+const {
+  crearProducto,
+  agregarTalla,
+  eliminarProducto,
+  vaciarCatalogo,
+  requiereTalla,
+  TALLA_TIPO,
+} = await import("./catalogo");
 
 beforeEach(() => {
   addDoc.mockClear();
@@ -98,5 +104,21 @@ describe("vaciarCatalogo", () => {
     expect(batchDelete).toHaveBeenCalledTimes(3);
     expect(batchCommit).toHaveBeenCalledTimes(1);
     expect(borrados).toBe(3);
+  });
+});
+
+describe("requiereTalla", () => {
+  it("es obligatoria en productos a la medida", () => {
+    expect(requiereTalla({ tallaTipo: TALLA_TIPO.LIBRE })).toBe(true);
+  });
+
+  it("es obligatoria en productos de lista con opciones", () => {
+    expect(requiereTalla({ tallaTipo: TALLA_TIPO.LISTA, tallas: ["M"] })).toBe(true);
+  });
+
+  it("no lo es sin talla, ni con lista vacía, ni sin producto", () => {
+    expect(requiereTalla({ tallaTipo: TALLA_TIPO.NINGUNA, tallas: [] })).toBe(false);
+    expect(requiereTalla({ tallaTipo: TALLA_TIPO.LISTA, tallas: [] })).toBe(false);
+    expect(requiereTalla(undefined)).toBe(false);
   });
 });
