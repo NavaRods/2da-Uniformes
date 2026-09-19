@@ -95,12 +95,17 @@ export default function ElementoPerfil() {
       return;
     }
 
+    limpiarPedido();
+    setGuardandoPedido(false);
+  }
+
+  function limpiarPedido() {
     setProductoId("");
     setTalla("");
     setColor("");
     setTipoPago("liquidacion");
     setMontoAbono("");
-    setGuardandoPedido(false);
+    setErrorPedido("");
   }
 
   function iniciarEdicion() {
@@ -513,9 +518,25 @@ export default function ElementoPerfil() {
 
         {errorPedido && <p className="error">{errorPedido}</p>}
 
-        <button type="submit" className="btn-primary" disabled={!producto || faltaTalla || guardandoPedido}>
-          {guardandoPedido ? "Guardando..." : "Agregar pedido"}
-        </button>
+        <div className="inline-form acciones-pedido">
+          {producto && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={limpiarPedido}
+              disabled={guardandoPedido}
+            >
+              Cancelar
+            </button>
+          )}
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={!producto || faltaTalla || guardandoPedido}
+          >
+            {guardandoPedido ? "Guardando..." : "Agregar pedido"}
+          </button>
+        </div>
       </form>
 
       <h2>Pedidos</h2>

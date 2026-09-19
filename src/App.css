@@ -729,3 +729,8 @@ th {
   color: var(--danger);
   margin-left: 8px;
 }
+
+/* Botones del formulario de pedido: se reparten todo el ancho */
+.acciones-pedido > button {
+  flex: 1;
+}
