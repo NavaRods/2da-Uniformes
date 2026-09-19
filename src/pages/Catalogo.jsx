@@ -28,6 +28,7 @@ export default function Catalogo() {
   const [nuevoProducto, setNuevoProducto] = useState(NUEVO_VACIO);
 
   const [pendientes, setPendientes] = useState([]);
+  const [editandoKey, setEditandoKey] = useState(null); // cambio pendiente que se está reeditando
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
   const [vaciando, setVaciando] = useState(false);
@@ -83,6 +84,35 @@ export default function Catalogo() {
   function cancelar() {
     setModo(null);
     setProductoId("");
+    setEditandoKey(null);
+  }
+
+  // Guarda un cambio en la lista: si se estaba reeditando uno, lo reemplaza en
+  // su lugar (o lo quita si `cambio` es null); si no, lo agrega al final.
+  function guardarPendiente(cambio) {
+    setPendientes((lista) => {
+      if (editandoKey === null) return cambio ? [...lista, cambio] : lista;
+      return cambio
+        ? lista.map((c) => (c.key === editandoKey ? cambio : c))
+        : lista.filter((c) => c.key !== editandoKey);
+    });
+  }
+
+  function reeditarPendiente(cambio) {
+    if (cambio.tipo === "nuevo") {
+      setNuevoProducto(cambio.datos);
+      setModo("nuevo");
+    } else {
+      const p = productos.find((x) => x.id === cambio.productoId);
+      if (!p) return;
+      setProductoId(p.id);
+      setPrecioEditado(String(cambio.precioNuevo ?? p.precio));
+      setTallasNuevas(cambio.tallasNuevas);
+      setTallaEnCurso("");
+      setModo("editar");
+    }
+    setEditandoKey(cambio.key);
+    setGuardado(false);
   }
 
   function agregarTallaEnCurso() {
@@ -103,36 +133,32 @@ export default function Catalogo() {
         : null;
 
     if (precioCambio === null && tallasNuevas.length === 0) {
+      // Sin cambios reales: si venía de la lista, ya no hay nada que guardar.
+      guardarPendiente(null);
       cancelar();
       return;
     }
 
-    setPendientes((p) => [
-      ...p,
-      {
-        key: crypto.randomUUID(),
-        tipo: "editar",
-        productoId: producto.id,
-        nombreProducto: producto.nombre,
-        precioAnterior: producto.precio,
-        precioNuevo: precioCambio,
-        tallasNuevas,
-      },
-    ]);
+    guardarPendiente({
+      key: editandoKey ?? crypto.randomUUID(),
+      tipo: "editar",
+      productoId: producto.id,
+      nombreProducto: producto.nombre,
+      precioAnterior: producto.precio,
+      precioNuevo: precioCambio,
+      tallasNuevas,
+    });
 
     cancelar();
   }
 
   function confirmarNuevoProducto() {
     if (!nuevoProducto.nombre.trim() || !nuevoProducto.precio) return;
-    setPendientes((p) => [
-      ...p,
-      {
-        key: crypto.randomUUID(),
-        tipo: "nuevo",
-        datos: { ...nuevoProducto },
-      },
-    ]);
+    guardarPendiente({
+      key: editandoKey ?? crypto.randomUUID(),
+      tipo: "nuevo",
+      datos: { ...nuevoProducto },
+    });
     cancelar();
   }
 
@@ -288,7 +314,7 @@ export default function Catalogo() {
               Cancelar
             </button>
             <button className="btn-primary" onClick={confirmarCambioProducto}>
-              Agregar cambio
+              {editandoKey ? "Actualizar cambio" : "Agregar cambio"}
             </button>
           </div>
         </div>
@@ -335,7 +361,7 @@ export default function Catalogo() {
               Cancelar
             </button>
             <button className="btn-primary" onClick={confirmarNuevoProducto}>
-              Agregar cambio
+              {editandoKey ? "Actualizar cambio" : "Agregar cambio"}
             </button>
           </div>
         </div>
@@ -347,9 +373,22 @@ export default function Catalogo() {
           {pendientes.map((c) => (
             <div className="carrito-item" key={c.key}>
               <span>{descripcionCambio(c)}</span>
-              <button className="btn-secondary" onClick={() => quitarPendiente(c.key)}>
-                Quitar
-              </button>
+              <span className="etiquetas">
+                <button
+                  className="btn-secondary"
+                  onClick={() => reeditarPendiente(c)}
+                  disabled={editandoKey !== null}
+                >
+                  {editandoKey === c.key ? "Editando..." : "Editar"}
+                </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => quitarPendiente(c.key)}
+                  disabled={editandoKey !== null}
+                >
+                  Quitar
+                </button>
+              </span>
             </div>
           ))}
           <button className="btn-primary" onClick={guardarTodo} disabled={guardando}>
