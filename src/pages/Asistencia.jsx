@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listenElementos } from "../lib/elementos";
+import FormElemento from "../components/FormElemento";
 import {
   ESTADOS,
   fechaLocal,
@@ -16,6 +17,7 @@ export default function Asistencia() {
   const [asistencia, setAsistencia] = useState({});
   const [busqueda, setBusqueda] = useState("");
   const [error, setError] = useState("");
+  const [mostrarForm, setMostrarForm] = useState(false);
 
   useEffect(() => listenElementos(setElementos), []);
   useEffect(() => listenAsistenciaDia(fecha, setAsistencia), [fecha]);
@@ -40,7 +42,18 @@ export default function Asistencia() {
 
   return (
     <div className="page">
-      <h1>Asistencia</h1>
+      <div className="page-header">
+        <h1>Asistencia</h1>
+        <button
+          className="btn-primary"
+          onClick={() => setMostrarForm((v) => !v)}
+        >
+          {mostrarForm ? "Cancelar" : "+ Nuevo elemento"}
+        </button>
+      </div>
+
+      {mostrarForm && <FormElemento onCreado={() => setMostrarForm(false)} />}
+
       <div className="asistencia-controles">
         <input
           type="date"
