@@ -19,3 +19,9 @@ describe("fechaLocalISO / horaLocalHHMM", () => {
     expect(horaLocalHHMM(fecha)).toMatch(/^\d{2}:\d{2}$/);
   });
 });
+
+describe("fechaLocalISO de noche", () => {
+  it("usa el día local, no el de UTC", () => {
+    expect(fechaLocalISO(new Date(2026, 8, 19, 22, 30))).toBe("2026-09-19");
+  });
+});

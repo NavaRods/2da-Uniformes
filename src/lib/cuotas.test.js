@@ -7,6 +7,8 @@ vi.mock("firebase/firestore", () => ({
   collection: (...args) => collection(...args),
   addDoc: (...args) => addDoc(...args),
   deleteDoc: vi.fn(),
+  collectionGroup: vi.fn(),
+  where: vi.fn(),
   doc: vi.fn(),
   onSnapshot: vi.fn(),
   query: vi.fn(),

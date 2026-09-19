@@ -10,7 +10,10 @@ export function fechaHoraActual() {
 }
 
 export function fechaLocalISO(fecha = new Date()) {
-  return fecha.toISOString().slice(0, 10);
+  // Fecha del reloj local. toISOString usaría UTC y de noche daría el día siguiente.
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  const dia = String(fecha.getDate()).padStart(2, "0");
+  return `${fecha.getFullYear()}-${mes}-${dia}`;
 }
 
 export function horaLocalHHMM(fecha = new Date()) {

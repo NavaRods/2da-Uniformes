@@ -911,3 +911,146 @@ th {
 .historial-cuotas .nota {
   margin-top: 0;
 }
+
+/* --- Relación de pagos --- */
+.dia-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.dia-centro {
+  flex: 1 1 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dia-etiqueta {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+  text-align: center;
+}
+
+.tarjetas-resumen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.tarjetas-resumen .card {
+  margin: 0;
+  gap: 4px;
+}
+
+.tarjeta-total {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, var(--primary-soft), var(--bg-elevated));
+  border-color: var(--primary);
+}
+
+.total-monto {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: -0.02em;
+}
+
+.total-sub {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.filtros {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.chip {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.chip.activo {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-contrast);
+}
+
+.pagos {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.pago {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.pago-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.pago-nombre {
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.pago-nombre:hover {
+  color: var(--primary);
+}
+
+.pago-monto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 17px;
+}
+
+.insignia {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.insignia-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.insignia-abono {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.insignia-cuota {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}

@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "deploy": "npm test && npm run build && firebase deploy --only hosting,firestore:rules",
+    "deploy": "npm test && npm run build && firebase deploy --only hosting,firestore",
     "test": "vitest run",
     "test:watch": "vitest"
   },

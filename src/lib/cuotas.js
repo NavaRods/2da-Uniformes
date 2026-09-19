@@ -1,5 +1,7 @@
 import {
   collection,
+  collectionGroup,
+  where,
   addDoc,
   deleteDoc,
   doc,
@@ -66,6 +68,21 @@ export function listenCuotas(elementoId, callback) {
   const q = query(collection(db, "elementos", elementoId, "cuotas"), orderBy("fecha", "desc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
+// Todas las mensualidades cobradas en un día (de cualquier elemento), para la
+// Relación de pagos.
+export function listenCuotasDelDia(fecha, callback) {
+  const q = query(collectionGroup(db, "cuotas"), where("fechaLocal", "==", fecha));
+  return onSnapshot(q, (snap) => {
+    callback(
+      snap.docs.map((d) => ({
+        id: d.id,
+        elementoId: d.ref.parent.parent.id,
+        ...d.data(),
+      }))
+    );
   });
 }
 
