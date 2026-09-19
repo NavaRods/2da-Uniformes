@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { linkWhatsapp, mensajeComprobante, mensajeEntrega, mensajeCambioPendiente } from "./whatsapp";
+import {
+  linkWhatsapp,
+  mensajeComprobante,
+  mensajeEntrega,
+  mensajeCambioPendiente,
+  normalizarTelefono,
+  telefonoValido,
+  mensajeRelacionDia,
+} from "./whatsapp";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -92,5 +100,67 @@ describe("mensajeCambioPendiente", () => {
       pendiente: false,
     });
     expect(msg).toContain("ya no tiene cambio pendiente");
+  });
+});
+
+describe("normalizarTelefono", () => {
+  it("agrega el código de México a números de 10 dígitos", () => {
+    expect(normalizarTelefono("(55) 1234-5678")).toBe("525512345678");
+  });
+
+  it("respeta un número que ya trae código de país", () => {
+    expect(normalizarTelefono("+52 55 1234 5678")).toBe("525512345678");
+    expect(normalizarTelefono("+1 415 555 0132")).toBe("14155550132");
+  });
+
+  it("convierte el formato antiguo 521 y quita el prefijo 00", () => {
+    expect(normalizarTelefono("5215512345678")).toBe("525512345678");
+    expect(normalizarTelefono("0052 55 1234 5678")).toBe("525512345678");
+  });
+
+  it("valida longitud", () => {
+    expect(telefonoValido("525512345678")).toBe(true);
+    expect(telefonoValido("12345")).toBe(false);
+    expect(telefonoValido("")).toBe(false);
+    expect(telefonoValido(undefined)).toBe(false);
+  });
+});
+
+describe("mensajeRelacionDia", () => {
+  const resumen = {
+    total: 530,
+    movimientos: 2,
+    totalUniformes: 50,
+    totalMensualidades: 480,
+    mesesCobrados: 8,
+  };
+  const filas = [
+    { elementoNombre: "Ana", concepto: "Playera — talla M", monto: 50, etiqueta: "Abono", horaLocal: "10:30" },
+    { elementoNombre: "Luis", concepto: "Mensualidad — Ene 2026", monto: 480, etiqueta: "Mensualidad", horaLocal: "09:00" },
+  ];
+
+  it("incluye fecha, totales por tipo y el detalle numerado", () => {
+    const msg = mensajeRelacionDia({ fechaEtiqueta: "sábado, 19 de septiembre de 2026", filas, resumen });
+    expect(msg).toContain("*Relación de pagos*");
+    expect(msg).toContain("sábado, 19 de septiembre de 2026");
+    expect(msg).toContain("Total del día: $530 (2 movimientos)");
+    expect(msg).toContain("• Uniformes: $50");
+    expect(msg).toContain("• Mensualidades: $480 (8 meses)");
+    expect(msg).toContain("1. Ana — Playera — talla M — $50 (Abono) · 10:30");
+    expect(msg).toContain("2. Luis — Mensualidad — Ene 2026 — $480 (Mensualidad) · 09:00");
+  });
+
+  it("sin movimientos avisa que no hubo pagos", () => {
+    const msg = mensajeRelacionDia({ fechaEtiqueta: "hoy", filas: [], resumen });
+    expect(msg).toContain("Sin pagos registrados este día.");
+  });
+
+  it("recorta el detalle cuando hay demasiados movimientos", () => {
+    const muchas = Array.from({ length: 45 }, (_, i) => ({
+      elementoNombre: `E${i}`, concepto: "X", monto: 1, etiqueta: "Abono", horaLocal: "",
+    }));
+    const msg = mensajeRelacionDia({ fechaEtiqueta: "hoy", filas: muchas, resumen: { ...resumen, movimientos: 45 } });
+    expect(msg).toContain("… y 5 movimientos más");
+    expect(msg).not.toContain("41. E40");
   });
 });

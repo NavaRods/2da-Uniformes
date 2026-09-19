@@ -1059,3 +1059,19 @@ th {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* --- Relación de pagos: envío por WhatsApp --- */
+.acciones-whatsapp {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.acciones-whatsapp .btn-primary {
+  flex: 1;
+}
+
+.acciones-whatsapp .btn-secondary {
+  font-size: 18px;
+  padding: 8px 14px;
+}

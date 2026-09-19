@@ -4,6 +4,13 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { listenAbonosDelDia, listenCambiosPendientes } from "../lib/pedidos";
 import { listenCuotasDelDia } from "../lib/cuotas";
+import { guardarNumeroWhatsapp, listenConfiguracion } from "../lib/configuracion";
+import {
+  linkWhatsapp,
+  mensajeRelacionDia,
+  normalizarTelefono,
+  telefonoValido,
+} from "../lib/whatsapp";
 import { fechaLocalISO, formatoMoneda } from "../lib/format";
 import {
   etiquetaDia,
@@ -30,6 +37,11 @@ export default function RelacionPagos() {
   const [filtro, setFiltro] = useState("todos");
   const [cargado, setCargado] = useState({ abonos: false, cuotas: false });
   const [error, setError] = useState("");
+  const [config, setConfig] = useState(null);
+  const [mostrarConfig, setMostrarConfig] = useState(false);
+  const [numeroEditado, setNumeroEditado] = useState("");
+  const [errorConfig, setErrorConfig] = useState("");
+  const [guardandoConfig, setGuardandoConfig] = useState(false);
 
   const hoy = fechaLocalISO();
 
@@ -79,6 +91,7 @@ export default function RelacionPagos() {
   }, [fecha]);
 
   useEffect(() => listenCambiosPendientes(setCambiosPendientes), []);
+  useEffect(() => listenConfiguracion(setConfig, () => setConfig({})), []);
 
   useEffect(() => {
     let cancelado = false;
@@ -119,6 +132,46 @@ export default function RelacionPagos() {
   const resumen = resumenDia(filas);
   const visibles = filas.filter((f) => filtro === "todos" || f.tipo === filtro);
   const esHoy = fecha === hoy;
+  const numeroConfigurado = config?.whatsappNumero;
+  const hayNumero = telefonoValido(numeroConfigurado);
+  const numeroPrevio = normalizarTelefono(numeroEditado);
+
+  function abrirConfig() {
+    setNumeroEditado(numeroConfigurado || "");
+    setErrorConfig("");
+    setMostrarConfig((v) => !v);
+  }
+
+  async function guardarConfig(e) {
+    e.preventDefault();
+    if (!telefonoValido(numeroPrevio)) {
+      setErrorConfig("Escribe un número válido: 10 dígitos, o con código de país.");
+      return;
+    }
+    setGuardandoConfig(true);
+    setErrorConfig("");
+    try {
+      await guardarNumeroWhatsapp(numeroPrevio);
+      setMostrarConfig(false);
+    } catch {
+      setErrorConfig("No se pudo guardar el número. Verifica tu conexión e inténtalo de nuevo.");
+    }
+    setGuardandoConfig(false);
+  }
+
+  // Se abre en el mismo clic (sin esperas) para que el navegador no bloquee la ventana.
+  function enviarPorWhatsapp() {
+    if (!hayNumero) {
+      abrirConfig();
+      return;
+    }
+    const mensaje = mensajeRelacionDia({
+      fechaEtiqueta: etiquetaDia(fecha),
+      filas,
+      resumen,
+    });
+    window.open(linkWhatsapp(numeroConfigurado, mensaje), "_blank");
+  }
   const cargando = !error && !(cargado.abonos && cargado.cuotas);
 
   return (
@@ -158,6 +211,65 @@ export default function RelacionPagos() {
           </button>
         )}
       </div>
+
+      <div className="acciones-whatsapp">
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={enviarPorWhatsapp}
+          disabled={cargando || !!error}
+        >
+          📲 Enviar relación del día por WhatsApp
+        </button>
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={abrirConfig}
+          aria-expanded={mostrarConfig}
+          aria-label="Configurar número de WhatsApp"
+          title="Configurar número de WhatsApp"
+        >
+          ⚙️
+        </button>
+      </div>
+
+      {!hayNumero && config && !mostrarConfig && (
+        <p className="nota">Aún no hay un número configurado: pulsa ⚙️ para elegir a quién se envía.</p>
+      )}
+
+      {mostrarConfig && (
+        <form onSubmit={guardarConfig} className="card">
+          <h2>Número de WhatsApp</h2>
+          <p className="nota">Recibirá la relación de pagos del día. Se guarda para todos los usuarios.</p>
+          <div className="campo">
+            <label>Número</label>
+            <input
+              type="tel"
+              inputMode="tel"
+              placeholder="10 dígitos, ej. 55 1234 5678"
+              value={numeroEditado}
+              onChange={(e) => setNumeroEditado(e.target.value)}
+              autoFocus
+            />
+            {numeroEditado && (
+              <p className="nota">
+                {telefonoValido(numeroPrevio)
+                  ? `Se enviará a +${numeroPrevio}`
+                  : "Número incompleto"}
+              </p>
+            )}
+          </div>
+          {errorConfig && <p className="error">{errorConfig}</p>}
+          <div className="inline-form acciones-pedido">
+            <button type="button" className="btn-secondary" onClick={() => setMostrarConfig(false)}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn-primary" disabled={guardandoConfig}>
+              {guardandoConfig ? "Guardando..." : "Guardar número"}
+            </button>
+          </div>
+        </form>
+      )}
 
       {error && <p className="error">{error}</p>}
       {cargando && <p className="nota">Cargando pagos…</p>}

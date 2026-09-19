@@ -129,6 +129,17 @@ service cloud.firestore {
       allow read, write: if esUsuarioAutorizado();
     }
 
+    // --- Configuración de la app ---
+    // Ajustes compartidos (hoy, solo el número de WhatsApp que recibe la
+    // Relación de pagos). Un número con código de país: 11 a 15 dígitos.
+    match /configuracion/{ajusteId} {
+      allow read: if esUsuarioAutorizado();
+      allow create, update: if esUsuarioAutorizado() &&
+        request.resource.data.keys().hasOnly(["whatsappNumero"]) &&
+        request.resource.data.whatsappNumero is string &&
+        request.resource.data.whatsappNumero.matches('^[0-9]{11,15}$');
+    }
+
     // --- Consultas de grupo de colección ---
     // La Relación de pagos lee los abonos y las mensualidades de todos los
     // elementos a la vez, y los cambios pendientes de todos los pedidos.
