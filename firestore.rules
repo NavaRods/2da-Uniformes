@@ -129,6 +129,23 @@ service cloud.firestore {
       allow read, write: if esUsuarioAutorizado();
     }
 
+    // --- Consultas de grupo de colección ---
+    // La Relación de pagos lee los abonos y las mensualidades de todos los
+    // elementos a la vez, y los cambios pendientes de todos los pedidos.
+    // Firestore exige una regla con comodín recursivo para esas consultas;
+    // las reglas anidadas de arriba solo cubren lecturas dentro de un elemento.
+    match /{path=**}/abonos/{abonoId} {
+      allow read: if esUsuarioAutorizado();
+    }
+
+    match /{path=**}/cuotas/{cuotaId} {
+      allow read: if esUsuarioAutorizado();
+    }
+
+    match /{path=**}/pedidos/{pedidoId} {
+      allow read: if esUsuarioAutorizado();
+    }
+
     // Cualquier otra ruta no contemplada arriba queda bloqueada por
     // defecto (Firestore deniega lo que no coincide con una regla).
   }
