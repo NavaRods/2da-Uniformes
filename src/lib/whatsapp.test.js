@@ -128,39 +128,77 @@ describe("normalizarTelefono", () => {
 
 describe("mensajeRelacionDia", () => {
   const resumen = {
-    total: 530,
-    movimientos: 2,
-    totalUniformes: 50,
-    totalMensualidades: 480,
-    mesesCobrados: 8,
+    total: 1345,
+    movimientos: 6,
+    general: [
+      { productoNombre: "Camisa Blanca", talla: "14 - 16", color: "", cantidad: 8, total: 680 },
+      { productoNombre: "Camisa Blanca", talla: "M A", color: "", cantidad: 3, total: 255 },
+      { productoNombre: "Fajilla", talla: "Ch", color: "", cantidad: 1, total: 170 },
+    ],
+    mensualidades: [
+      {
+        nombre: "Juan Carlos Sevilla Hernández",
+        monto: 240,
+        meses: ["Oct 2025", "Nov 2025", "Dic 2025", "Ene 2026"],
+      },
+    ],
   };
-  const filas = [
-    { elementoNombre: "Ana", concepto: "Playera — talla M", monto: 50, etiqueta: "Abono", horaLocal: "10:30" },
-    { elementoNombre: "Luis", concepto: "Mensualidad — Ene 2026", monto: 480, etiqueta: "Mensualidad", horaLocal: "09:00" },
-  ];
 
-  it("incluye fecha, totales por tipo y el detalle numerado", () => {
-    const msg = mensajeRelacionDia({ fechaEtiqueta: "sábado, 19 de septiembre de 2026", filas, resumen });
-    expect(msg).toContain("*Relación de pagos*");
-    expect(msg).toContain("sábado, 19 de septiembre de 2026");
-    expect(msg).toContain("Total del día: $530 (2 movimientos)");
-    expect(msg).toContain("• Uniformes: $50");
-    expect(msg).toContain("• Mensualidades: $480 (8 meses)");
-    expect(msg).toContain("1. Ana — Playera — talla M — $50 (Abono) · 10:30");
-    expect(msg).toContain("2. Luis — Mensualidad — Ene 2026 — $480 (Mensualidad) · 09:00");
+  it("tiene exactamente el formato pedido", () => {
+    const msg = mensajeRelacionDia({ fechaEtiqueta: "sábado, 19 de septiembre de 2026", resumen });
+    expect(msg).toBe(
+      [
+        "Relación de pagos",
+        "Sábado, 19 de septiembre de 2026",
+        "",
+        "Detalles (Uniformidad):",
+        "",
+        "1. ($680) Camisa Blanca (14 - 16) -> 8 piezas",
+        "2. ($255) Camisa Blanca (M A) -> 3 piezas",
+        "3. ($170) Fajilla (Ch) -> 1 pieza",
+        "",
+        "Detalles (Mensualidades):",
+        "",
+        "1. ($240) Juan Carlos Sevilla Hernández -> Oct 2025, Nov 2025, Dic 2025, Ene 2026",
+        "",
+        "Total: $1.345",
+      ].join("\n")
+    );
+  });
+
+  it("incluye el color cuando la pieza lo tiene y omite las secciones vacías", () => {
+    const msg = mensajeRelacionDia({
+      fechaEtiqueta: "hoy",
+      resumen: {
+        total: 90,
+        movimientos: 1,
+        general: [{ productoNombre: "Playera", talla: "M", color: "Negra", cantidad: 2, total: 90 }],
+        mensualidades: [],
+      },
+    });
+    expect(msg).toContain("1. ($90) Playera Negra (M) -> 2 piezas");
+    expect(msg).not.toContain("Mensualidades");
+    expect(msg.endsWith("Total: $90")).toBe(true);
+  });
+
+  it("piezas sin talla salen sin paréntesis", () => {
+    const msg = mensajeRelacionDia({
+      fechaEtiqueta: "hoy",
+      resumen: {
+        total: 40,
+        movimientos: 1,
+        general: [{ productoNombre: "Corbata", talla: "", color: "", cantidad: 1, total: 40 }],
+        mensualidades: [],
+      },
+    });
+    expect(msg).toContain("1. ($40) Corbata -> 1 pieza");
   });
 
   it("sin movimientos avisa que no hubo pagos", () => {
-    const msg = mensajeRelacionDia({ fechaEtiqueta: "hoy", filas: [], resumen });
-    expect(msg).toContain("Sin pagos registrados este día.");
-  });
-
-  it("recorta el detalle cuando hay demasiados movimientos", () => {
-    const muchas = Array.from({ length: 45 }, (_, i) => ({
-      elementoNombre: `E${i}`, concepto: "X", monto: 1, etiqueta: "Abono", horaLocal: "",
-    }));
-    const msg = mensajeRelacionDia({ fechaEtiqueta: "hoy", filas: muchas, resumen: { ...resumen, movimientos: 45 } });
-    expect(msg).toContain("… y 5 movimientos más");
-    expect(msg).not.toContain("41. E40");
+    const msg = mensajeRelacionDia({
+      fechaEtiqueta: "hoy",
+      resumen: { total: 0, movimientos: 0, general: [], mensualidades: [] },
+    });
+    expect(msg).toBe("Relación de pagos\nHoy\n\nSin pagos registrados este día.");
   });
 });

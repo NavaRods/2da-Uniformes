@@ -59,32 +59,49 @@ export function telefonoValido(numeroNormalizado) {
   return /^\d{11,15}$/.test(numeroNormalizado ?? "");
 }
 
-const MAX_LINEAS_DETALLE = 40;
+// Pesos con punto como separador de miles ($1.345), como se lee en el mensaje.
+function pesos(monto) {
+  const n = Number(monto) || 0;
+  const texto = Number.isInteger(n) ? String(n) : n.toFixed(2).replace(".", ",");
+  const [entero, decimales] = texto.split(",");
+  const conPuntos = entero.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `$${conPuntos}${decimales ? "," + decimales : ""}`;
+}
 
-// Resumen del día para mandarlo por WhatsApp desde la Relación de pagos.
-// `filas` son los movimientos ya armados (ver lib/relacionPagos.js).
-export function mensajeRelacionDia({ fechaEtiqueta, filas, resumen }) {
-  const encabezado = `*Relación de pagos*\n${fechaEtiqueta}`;
-  if (filas.length === 0) return `${encabezado}\n\nSin pagos registrados este día.`;
+function piezas(n) {
+  return `${n} ${n === 1 ? "pieza" : "piezas"}`;
+}
 
-  const meses = resumen.mesesCobrados
-    ? ` (${resumen.mesesCobrados} ${resumen.mesesCobrados === 1 ? "mes" : "meses"})`
-    : "";
-  const lineas = filas.slice(0, MAX_LINEAS_DETALLE).map(
-    (f, i) =>
-      `${i + 1}. ${f.elementoNombre} — ${f.concepto} — ${formatoMoneda(f.monto)} (${f.etiqueta})` +
-      (f.horaLocal ? ` · ${f.horaLocal}` : "")
-  );
-  if (filas.length > MAX_LINEAS_DETALLE) {
-    lineas.push(`… y ${filas.length - MAX_LINEAS_DETALLE} movimientos más`);
+// "Playera Negra (M)": producto, color si lo hay y talla entre paréntesis.
+function nombrePieza({ productoNombre, color, talla }) {
+  return `${productoNombre}${color ? ` ${color}` : ""}${talla ? ` (${talla})` : ""}`;
+}
+
+// Relación de pagos del día para mandar por WhatsApp. `resumen` viene de
+// resumenDia() en lib/relacionPagos.js.
+export function mensajeRelacionDia({ fechaEtiqueta, resumen }) {
+  const fecha = fechaEtiqueta.charAt(0).toUpperCase() + fechaEtiqueta.slice(1);
+  const partes = [`Relación de pagos\n${fecha}`];
+
+  if (resumen.movimientos === 0) {
+    partes.push("Sin pagos registrados este día.");
+    return partes.join("\n\n");
   }
 
-  return (
-    `${encabezado}\n\n` +
-    `Total del día: ${formatoMoneda(resumen.total)} (${resumen.movimientos} ` +
-    `${resumen.movimientos === 1 ? "movimiento" : "movimientos"})\n` +
-    `• Uniformes: ${formatoMoneda(resumen.totalUniformes)}\n` +
-    `• Mensualidades: ${formatoMoneda(resumen.totalMensualidades)}${meses}\n\n` +
-    `Detalle:\n${lineas.join("\n")}`
-  );
+  if (resumen.general.length > 0) {
+    const lineas = resumen.general.map(
+      (g, i) => `${i + 1}. (${pesos(g.total)}) ${nombrePieza(g)} -> ${piezas(g.cantidad)}`
+    );
+    partes.push(`Detalles (Uniformidad):\n\n${lineas.join("\n")}`);
+  }
+
+  if (resumen.mensualidades.length > 0) {
+    const lineas = resumen.mensualidades.map(
+      (m, i) => `${i + 1}. (${pesos(m.monto)}) ${m.nombre} -> ${m.meses.join(", ")}`
+    );
+    partes.push(`Detalles (Mensualidades):\n\n${lineas.join("\n")}`);
+  }
+
+  partes.push(`Total: ${pesos(resumen.total)}`);
+  return partes.join("\n\n");
 }

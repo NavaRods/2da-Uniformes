@@ -167,7 +167,6 @@ export default function RelacionPagos() {
     }
     const mensaje = mensajeRelacionDia({
       fechaEtiqueta: etiquetaDia(fecha),
-      filas,
       resumen,
     });
     window.open(linkWhatsapp(numeroConfigurado, mensaje), "_blank");

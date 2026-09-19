@@ -7,6 +7,7 @@ export function filaDeAbono(abono, pedido, elementoNombre) {
   return {
     id: `abono-${abono.id}`,
     tipo: "uniforme",
+    pedidoId: abono.pedidoId,
     elementoId: abono.elementoId,
     elementoNombre: elementoNombre || "?",
     concepto: pedido ? pedido.articulo : "?",
@@ -28,6 +29,7 @@ export function filaDeCuota(cuota, elementoNombre) {
     elementoId: cuota.elementoId,
     elementoNombre: elementoNombre || "?",
     concepto: `Mensualidad — ${meses.map(etiquetaMes).join(", ")}`,
+    meses,
     cantidadMeses: meses.length,
     monto: Number(cuota.total) || 0,
     etiqueta: "Mensualidad",
@@ -46,14 +48,42 @@ export function resumenDia(filas) {
   const mensualidades = filas.filter((f) => f.tipo === "mensualidad");
   const suma = (lista) => lista.reduce((s, f) => s + f.monto, 0);
 
-  // Relación General: solo piezas, tallas y montos (sin datos del elemento).
+  // Relación General: piezas por producto/talla/color. Una pieza es un pedido,
+  // así que dos abonos al mismo pedido el mismo día cuentan una sola pieza,
+  // aunque sí suman su dinero.
   const porPieza = {};
   for (const f of uniformes) {
     const clave = [f.productoNombre, f.talla, f.color].filter(Boolean).join(" — ");
-    porPieza[clave] ??= { pieza: clave, cantidad: 0, total: 0 };
-    porPieza[clave].cantidad += 1;
+    porPieza[clave] ??= {
+      pieza: clave,
+      productoNombre: f.productoNombre,
+      talla: f.talla,
+      color: f.color,
+      pedidos: new Set(),
+      total: 0,
+    };
+    porPieza[clave].pedidos.add(f.pedidoId ?? f.id);
     porPieza[clave].total += f.monto;
   }
+  const general = Object.values(porPieza)
+    .map(({ pedidos, ...resto }) => ({ ...resto, cantidad: pedidos.size }))
+    .sort((a, b) => b.total - a.total);
+
+  // Mensualidades: una entrada por elemento (si pagó varias veces el mismo
+  // día se juntan), con sus meses en orden cronológico.
+  const porElemento = {};
+  for (const f of mensualidades) {
+    porElemento[f.elementoId] ??= { nombre: f.elementoNombre, monto: 0, meses: new Set() };
+    porElemento[f.elementoId].monto += f.monto;
+    f.meses.forEach((m) => porElemento[f.elementoId].meses.add(m));
+  }
+  const detalleMensualidades = Object.values(porElemento)
+    .map((e) => ({
+      nombre: e.nombre,
+      monto: e.monto,
+      meses: [...e.meses].sort().map(etiquetaMes),
+    }))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
 
   return {
     total: suma(filas),
@@ -61,7 +91,8 @@ export function resumenDia(filas) {
     totalUniformes: suma(uniformes),
     totalMensualidades: suma(mensualidades),
     mesesCobrados: mensualidades.reduce((s, f) => s + f.cantidadMeses, 0),
-    general: Object.values(porPieza),
+    general,
+    mensualidades: detalleMensualidades,
   };
 }
 

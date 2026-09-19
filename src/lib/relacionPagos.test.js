@@ -53,31 +53,48 @@ describe("filas", () => {
 
 describe("resumenDia", () => {
   const filas = [
-    { tipo: "uniforme", productoNombre: "Playera", talla: "M", color: "Negra", monto: 100 },
-    { tipo: "uniforme", productoNombre: "Playera", talla: "M", color: "Negra", monto: 50 },
-    { tipo: "uniforme", productoNombre: "Corbata", talla: "", color: "", monto: 40 },
-    { tipo: "mensualidad", cantidadMeses: 3, monto: 180 },
+    { id: "a1", pedidoId: "p1", tipo: "uniforme", productoNombre: "Playera", talla: "M", color: "Negra", monto: 100 },
+    { id: "a2", pedidoId: "p1", tipo: "uniforme", productoNombre: "Playera", talla: "M", color: "Negra", monto: 50 },
+    { id: "a3", pedidoId: "p2", tipo: "uniforme", productoNombre: "Playera", talla: "M", color: "Negra", monto: 30 },
+    { id: "a4", pedidoId: "p3", tipo: "uniforme", productoNombre: "Corbata", talla: "", color: "", monto: 40 },
+    { id: "c1", tipo: "mensualidad", elementoId: "e1", elementoNombre: "Luis", meses: ["2026-02"], cantidadMeses: 1, monto: 60 },
+    { id: "c2", tipo: "mensualidad", elementoId: "e1", elementoNombre: "Luis", meses: ["2026-01", "2026-03"], cantidadMeses: 2, monto: 120 },
+    { id: "c3", tipo: "mensualidad", elementoId: "e2", elementoNombre: "Ana", meses: ["2025-12"], cantidadMeses: 1, monto: 60 },
   ];
 
   it("separa totales de uniformes y mensualidades", () => {
     expect(resumenDia(filas)).toMatchObject({
-      total: 370,
-      movimientos: 4,
-      totalUniformes: 190,
-      totalMensualidades: 180,
-      mesesCobrados: 3,
+      total: 460,
+      movimientos: 7,
+      totalUniformes: 220,
+      totalMensualidades: 240,
+      mesesCobrados: 4,
     });
   });
 
-  it("agrupa los uniformes por pieza, talla y color", () => {
+  it("cuenta piezas por pedido, no por abono, y ordena por monto", () => {
     const { general } = resumenDia(filas);
-    expect(general).toContainEqual({ pieza: "Playera — M — Negra", cantidad: 2, total: 150 });
-    expect(general).toContainEqual({ pieza: "Corbata", cantidad: 1, total: 40 });
-    expect(general).toHaveLength(2);
+    expect(general.map((g) => [g.pieza, g.cantidad, g.total])).toEqual([
+      ["Playera — M — Negra", 2, 180], // dos abonos al pedido p1 = 1 pieza, más p2
+      ["Corbata", 1, 40],
+    ]);
+    expect(general[0]).toMatchObject({ productoNombre: "Playera", talla: "M", color: "Negra" });
+  });
+
+  it("junta las mensualidades por elemento con sus meses en orden cronológico", () => {
+    expect(resumenDia(filas).mensualidades).toEqual([
+      { nombre: "Ana", monto: 60, meses: ["Dic 2025"] },
+      { nombre: "Luis", monto: 180, meses: ["Ene 2026", "Feb 2026", "Mar 2026"] },
+    ]);
   });
 
   it("un día sin movimientos da ceros", () => {
-    expect(resumenDia([])).toMatchObject({ total: 0, movimientos: 0, general: [] });
+    expect(resumenDia([])).toMatchObject({
+      total: 0,
+      movimientos: 0,
+      general: [],
+      mensualidades: [],
+    });
   });
 });
 
