@@ -16,8 +16,13 @@ guardan localmente y se sincronizan solos cuando vuelve la conexión
 1. Copia `.env.example` a `.env.local`.
 2. Llena las variables `VITE_FIREBASE_*` con los datos de tu app web de
    Firebase (Configuración del proyecto → tus apps → Config).
-3. En `VITE_ALLOWED_EMAILS` pon, separados por coma, los correos de Google
-   autorizados a entrar a la app.
+3. El acceso se administra con roles (Admin / Operador) y Unidades desde la
+   pantalla "Usuarios" dentro de la app — ver `firestore.rules`. El primer
+   Admin no se puede crear desde la app (necesita ya ser Admin para eso): se
+   da de alta una sola vez a mano desde la consola de Firebase → Firestore →
+   colección `usuarios` → documento con ID = tu correo en minúsculas, campos
+   `{ rol: "admin", unidad: null, nombre: "..." }`. De ahí en adelante, ese
+   Admin da de alta a los demás desde la app.
 
 ## Desarrollo
 

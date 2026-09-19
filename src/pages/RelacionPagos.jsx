@@ -12,6 +12,7 @@ import {
   telefonoValido,
 } from "../lib/whatsapp";
 import { fechaLocalISO, formatoMoneda } from "../lib/format";
+import { useAuth } from "../auth/AuthContext";
 import {
   etiquetaDia,
   filaDeAbono,
@@ -28,6 +29,8 @@ const FILTROS = [
 ];
 
 export default function RelacionPagos() {
+  const { perfil } = useAuth();
+  const esAdmin = perfil?.rol === "admin";
   const [fecha, setFecha] = useState(fechaLocalISO());
   const [abonos, setAbonos] = useState([]);
   const [cuotas, setCuotas] = useState([]);
@@ -220,23 +223,29 @@ export default function RelacionPagos() {
         >
           📲 Enviar relación del día por WhatsApp
         </button>
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={abrirConfig}
-          aria-expanded={mostrarConfig}
-          aria-label="Configurar número de WhatsApp"
-          title="Configurar número de WhatsApp"
-        >
-          ⚙️
-        </button>
+        {esAdmin && (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={abrirConfig}
+            aria-expanded={mostrarConfig}
+            aria-label="Configurar número de WhatsApp"
+            title="Configurar número de WhatsApp"
+          >
+            ⚙️
+          </button>
+        )}
       </div>
 
       {!hayNumero && config && !mostrarConfig && (
-        <p className="nota">Aún no hay un número configurado: pulsa ⚙️ para elegir a quién se envía.</p>
+        <p className="nota">
+          {esAdmin
+            ? "Aún no hay un número configurado: pulsa ⚙️ para elegir a quién se envía."
+            : "Aún no hay un número configurado. Pide a un Admin que lo configure."}
+        </p>
       )}
 
-      {mostrarConfig && (
+      {esAdmin && mostrarConfig && (
         <form onSubmit={guardarConfig} className="card">
           <h2>Número de WhatsApp</h2>
           <p className="nota">Recibirá la relación de pagos del día. Se guarda para todos los usuarios.</p>

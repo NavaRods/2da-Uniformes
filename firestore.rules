@@ -4,20 +4,69 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // --- Autorización ---
-    // Único punto de verdad de quién puede entrar. Editar esta lista es la
-    // única forma de dar/quitar acceso (agregar o quitar un correo aquí).
-    function correosAutorizados() {
-      return [
-        "carlos.navarguez03@gmail.com"
-        // Agrega aquí el correo de tu compañera, ej:
-        // , "correo.companera@gmail.com"
-      ];
+    // Único punto de verdad de quién puede entrar: un doc en `usuarios` con
+    // ID = correo (en minúsculas). Ya no es una lista fija en este archivo;
+    // se administra desde la pantalla de Usuarios dentro de la app.
+    // IMPORTANTE (bootstrap): el primer usuario Admin no se puede crear desde
+    // la app (necesita ya ser Admin para eso). Se crea a mano una sola vez
+    // desde la consola de Firebase: colección "usuarios", doc con ID = tu
+    // correo en minúsculas, campos { rol: "admin", unidad: null, nombre: "..." }.
+    function usuarioActual() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.token.email.lower()));
     }
 
     function esUsuarioAutorizado() {
       return request.auth != null &&
         request.auth.token.email_verified == true &&
-        request.auth.token.email in correosAutorizados();
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.token.email.lower())) &&
+        // Sin el campo "activo" (documentos viejos) se trata como activo.
+        usuarioActual().data.get("activo", true) == true;
+    }
+
+    function esAdmin() {
+      return esUsuarioAutorizado() && usuarioActual().data.rol == "admin";
+    }
+
+    function miUnidad() {
+      return usuarioActual().data.unidad;
+    }
+
+    function enMiUnidad(unidad) {
+      return esAdmin() || (esUsuarioAutorizado() && unidad == miUnidad());
+    }
+
+    function unidadDelElemento(elementoId) {
+      return get(/databases/$(database)/documents/elementos/$(elementoId)).data.unidad;
+    }
+
+    // --- Usuarios (cuentas con acceso) ---
+    // "grado" es solo una etiqueta libre (no afecta permisos). "activo"
+    // permite suspender el acceso de alguien sin borrar su cuenta.
+    function usuarioValido(datos) {
+      return datos.keys().hasOnly(["nombre", "rol", "unidad", "grado", "activo", "creadoEn"]) &&
+        datos.rol in ["admin", "operador"] &&
+        (datos.rol == "admin" || (datos.unidad is string && datos.unidad.size() > 0)) &&
+        (!("nombre" in datos) || datos.nombre is string) &&
+        (!("grado" in datos) || datos.grado is string) &&
+        (!("activo" in datos) || datos.activo is bool);
+    }
+
+    match /usuarios/{email} {
+      allow read: if esAdmin() || (request.auth != null && request.auth.token.email.lower() == email);
+      allow create, update: if esAdmin() && usuarioValido(request.resource.data);
+      allow delete: if esAdmin();
+    }
+
+    // --- Unidades (lista abierta, la administra un Admin) ---
+    function unidadListaValida(datos) {
+      return datos.keys().hasOnly(["nombre", "creadoEn"]) &&
+        datos.nombre is string && datos.nombre.size() > 0;
+    }
+
+    match /unidades/{unidadId} {
+      allow read: if esUsuarioAutorizado();
+      allow create, update: if esAdmin() && unidadListaValida(request.resource.data);
+      allow delete: if esAdmin();
     }
 
     // --- Elementos ---
@@ -31,6 +80,7 @@ service cloud.firestore {
         "pagaInscripcion", "documentacionEntregada", "fechaBaja", "creadoEn"
       ]) &&
       datos.nombre is string && datos.nombre.size() > 0 &&
+      datos.unidad is string && datos.unidad.size() > 0 &&
       (!("grupo" in datos) || datos.grupo is string) &&
       (!("telefonos" in datos) || datos.telefonos is list) &&
       (!("pagaMensualidad" in datos) || datos.pagaMensualidad is bool) &&
@@ -40,9 +90,11 @@ service cloud.firestore {
     }
 
     match /elementos/{elementoId} {
-      allow read: if esUsuarioAutorizado();
-      allow create, update: if esUsuarioAutorizado() && elementoValido(request.resource.data);
-      allow delete: if esUsuarioAutorizado();
+      allow read: if enMiUnidad(resource.data.unidad);
+      allow create: if elementoValido(request.resource.data) && enMiUnidad(request.resource.data.unidad);
+      allow update: if elementoValido(request.resource.data) &&
+        enMiUnidad(resource.data.unidad) && enMiUnidad(request.resource.data.unidad);
+      allow delete: if enMiUnidad(resource.data.unidad);
 
       // --- Pedidos de un elemento ---
       function pedidoValido(datos) {
@@ -73,17 +125,17 @@ service cloud.firestore {
       }
 
       match /cuotas/{cuotaId} {
-        allow read: if esUsuarioAutorizado();
-        allow create: if esUsuarioAutorizado() && cuotaValida(request.resource.data);
+        allow read: if enMiUnidad(unidadDelElemento(elementoId));
+        allow create: if cuotaValida(request.resource.data) && enMiUnidad(unidadDelElemento(elementoId));
         // Un pago mal registrado se elimina y se vuelve a capturar; no se edita.
         allow update: if false;
-        allow delete: if esUsuarioAutorizado();
+        allow delete: if enMiUnidad(unidadDelElemento(elementoId));
       }
 
       match /pedidos/{pedidoId} {
-        allow read: if esUsuarioAutorizado();
-        allow create, update: if esUsuarioAutorizado() && pedidoValido(request.resource.data);
-        allow delete: if esUsuarioAutorizado();
+        allow read: if enMiUnidad(unidadDelElemento(elementoId));
+        allow create, update: if pedidoValido(request.resource.data) && enMiUnidad(unidadDelElemento(elementoId));
+        allow delete: if enMiUnidad(unidadDelElemento(elementoId));
 
         // --- Abonos de un pedido ---
         function abonoValido(datos) {
@@ -93,17 +145,19 @@ service cloud.firestore {
         }
 
         match /abonos/{abonoId} {
-          allow read: if esUsuarioAutorizado();
-          allow create: if esUsuarioAutorizado() && abonoValido(request.resource.data);
+          allow read: if enMiUnidad(unidadDelElemento(elementoId));
+          allow create: if abonoValido(request.resource.data) && enMiUnidad(unidadDelElemento(elementoId));
           // Los abonos no se editan. Solo se borran al eliminar el pedido
           // completo (la app los borra junto con el pedido).
           allow update: if false;
-          allow delete: if esUsuarioAutorizado();
+          allow delete: if enMiUnidad(unidadDelElemento(elementoId));
         }
       }
     }
 
     // --- Catálogo de productos ---
+    // Compartido entre todas las Unidades (mismo club, mismos productos).
+    // Cualquier usuario autorizado lo consulta; solo un Admin lo edita.
     // "grupo" ya no lo usa la app (el catálogo dejó de separarse por
     // Varonil/Femenino), pero se deja como campo permitido opcional para no
     // romper productos antiguos que todavía lo tengan guardado.
@@ -117,24 +171,34 @@ service cloud.firestore {
 
     match /catalogo/{productoId} {
       allow read: if esUsuarioAutorizado();
-      allow create, update: if esUsuarioAutorizado() && productoValido(request.resource.data);
-      allow delete: if esUsuarioAutorizado();
+      allow create, update: if esAdmin() && productoValido(request.resource.data);
+      allow delete: if esAdmin();
     }
 
     // --- Asistencia diaria ---
-    // Documento por día: { elementoId: true/false, ... }. Las claves son
-    // dinámicas (un ID por elemento) así que solo se valida que quien
-    // escribe esté autorizado.
-    match /asistencias/{fecha} {
-      allow read, write: if esUsuarioAutorizado();
+    // Un doc por día y Unidad: asistencias/{fecha}/porUnidad/{unidad}, con
+    // { unidad, fecha, estados: { elementoId: estado, ... } }. Separado así
+    // (en vez de un doc plano por día con cualquier elementoId como clave)
+    // para poder proteger la escritura por Unidad a nivel de regla.
+    function asistenciaValida(datos, unidad) {
+      return datos.keys().hasOnly(["unidad", "fecha", "estados"]) &&
+        datos.unidad == unidad &&
+        datos.fecha is string &&
+        datos.estados is map;
+    }
+
+    match /asistencias/{fecha}/porUnidad/{unidad} {
+      allow read: if enMiUnidad(unidad);
+      allow write: if enMiUnidad(unidad) && asistenciaValida(request.resource.data, unidad);
     }
 
     // --- Configuración de la app ---
     // Ajustes compartidos (hoy, solo el número de WhatsApp que recibe la
     // Relación de pagos). Un número con código de país: 11 a 15 dígitos.
+    // Solo un Admin lo cambia.
     match /configuracion/{ajusteId} {
       allow read: if esUsuarioAutorizado();
-      allow create, update: if esUsuarioAutorizado() &&
+      allow create, update: if esAdmin() &&
         request.resource.data.keys().hasOnly(["whatsappNumero"]) &&
         request.resource.data.whatsappNumero is string &&
         request.resource.data.whatsappNumero.matches('^[0-9]{11,15}$');
@@ -142,19 +206,22 @@ service cloud.firestore {
 
     // --- Consultas de grupo de colección ---
     // La Relación de pagos lee los abonos y las mensualidades de todos los
-    // elementos a la vez, y los cambios pendientes de todos los pedidos.
-    // Firestore exige una regla con comodín recursivo para esas consultas;
-    // las reglas anidadas de arriba solo cubren lecturas dentro de un elemento.
+    // elementos de una Unidad a la vez, y los cambios pendientes de todos los
+    // pedidos. Firestore exige una regla con comodín recursivo para esas
+    // consultas; las reglas anidadas de arriba solo cubren lecturas dentro de
+    // un elemento ya conocido. `path` aquí es el prefijo de ruta antes de la
+    // subcolección (p.ej. "elementos/ELID" o "elementos/ELID/pedidos/PEDID"),
+    // así que `path[1]` siempre es el ID del elemento dueño.
     match /{path=**}/abonos/{abonoId} {
-      allow read: if esUsuarioAutorizado();
+      allow read: if enMiUnidad(unidadDelElemento(path[1]));
     }
 
     match /{path=**}/cuotas/{cuotaId} {
-      allow read: if esUsuarioAutorizado();
+      allow read: if enMiUnidad(unidadDelElemento(path[1]));
     }
 
     match /{path=**}/pedidos/{pedidoId} {
-      allow read: if esUsuarioAutorizado();
+      allow read: if enMiUnidad(unidadDelElemento(path[1]));
     }
 
     // Cualquier otra ruta no contemplada arriba queda bloqueada por

@@ -1,14 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listenElementos } from "../lib/elementos";
+import { useAuth } from "../auth/AuthContext";
 import FormElemento from "../components/FormElemento";
 
 export default function Elementos() {
+  const { perfil } = useAuth();
   const [elementos, setElementos] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
 
-  useEffect(() => listenElementos(setElementos), []);
+  useEffect(
+    () => listenElementos(setElementos, perfil?.rol === "admin" ? undefined : perfil?.unidad),
+    [perfil?.rol, perfil?.unidad]
+  );
 
   const filtrados = elementos.filter((el) =>
     el.nombre.toLowerCase().includes(busqueda.toLowerCase())

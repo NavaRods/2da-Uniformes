@@ -4,35 +4,49 @@ import {
   signInWithPopup,
   signOut,
 } from "firebase/auth";
-import { auth, googleProvider, ALLOWED_EMAILS } from "../firebase";
+import { auth, googleProvider } from "../firebase";
+import { listenUsuario } from "../lib/usuarios";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [perfil, setPerfil] = useState(null);
+  const [perfilCargado, setPerfilCargado] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser && !isAllowed(firebaseUser.email)) {
-        setError("Este correo no tiene acceso a la app.");
-        signOut(auth);
-        setUser(null);
-      } else {
-        setError(null);
-        setUser(firebaseUser);
-      }
+      setError(null);
+      setUser(firebaseUser);
       setLoading(false);
+      if (!firebaseUser) {
+        setPerfil(null);
+        setPerfilCargado(true);
+      }
     });
     return unsub;
   }, []);
 
-  function isAllowed(email) {
-    if (!email) return false;
-    if (ALLOWED_EMAILS.length === 0) return true;
-    return ALLOWED_EMAILS.includes(email.toLowerCase());
-  }
+  // El perfil (rol y unidad) vive en Firestore, dado de alta por un Admin.
+  // Sin ese documento, el usuario está autenticado con Google pero sin
+  // acceso a la app (ver Privado en App.jsx).
+  useEffect(() => {
+    if (!user?.email) return;
+    setPerfilCargado(false);
+    return listenUsuario(
+      user.email,
+      (datos) => {
+        setPerfil(datos);
+        setPerfilCargado(true);
+      },
+      () => {
+        setPerfil(null);
+        setPerfilCargado(true);
+      }
+    );
+  }, [user?.email]);
 
   async function login() {
     setError(null);
@@ -49,7 +63,17 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        perfil,
+        // Cargando mientras se resuelve Firebase Auth o (si ya hay usuario) su perfil.
+        loading: loading || (!!user && !perfilCargado),
+        error,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

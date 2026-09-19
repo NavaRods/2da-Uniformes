@@ -9,6 +9,7 @@ import {
   vaciarCatalogo,
   TALLA_TIPO,
 } from "../lib/catalogo";
+import { useAuth } from "../auth/AuthContext";
 
 const NUEVO_VACIO = {
   nombre: "",
@@ -17,6 +18,8 @@ const NUEVO_VACIO = {
 };
 
 export default function Catalogo() {
+  const { perfil } = useAuth();
+  const esAdmin = perfil?.rol === "admin";
   const [productos, setProductos] = useState([]);
   const [modo, setModo] = useState(null); // null | "editar" | "nuevo"
   const [productoId, setProductoId] = useState("");
@@ -203,13 +206,15 @@ export default function Catalogo() {
     <div className="page">
       <h1>Catálogo</h1>
 
-      {productos.length === 0 && (
+      {!esAdmin && <p className="nota">Solo un Admin puede editar el catálogo.</p>}
+
+      {esAdmin && productos.length === 0 && (
         <button className="btn-primary" onClick={onSembrar}>
           Cargar catálogo inicial
         </button>
       )}
 
-      {productos.length > 0 && (
+      {esAdmin && productos.length > 0 && (
         <button
           className="btn-secondary"
           onClick={onVaciarCatalogo}
@@ -223,7 +228,7 @@ export default function Catalogo() {
 
       {guardado && <p className="success-msg">✅ Cambios guardados.</p>}
 
-      {modo === null && (
+      {esAdmin && modo === null && (
         <div className="card">
           <h2>Buscar producto para editar</h2>
           <select value="" onChange={(e) => e.target.value && iniciarEdicion(e.target.value)}>
@@ -261,7 +266,7 @@ export default function Catalogo() {
         </div>
       )}
 
-      {modo === "editar" && producto && (
+      {esAdmin && modo === "editar" && producto && (
         <div className="card">
           <h2>Editando: {producto.nombre}</h2>
           <p className="ficha-etiqueta">
@@ -320,7 +325,7 @@ export default function Catalogo() {
         </div>
       )}
 
-      {modo === "nuevo" && (
+      {esAdmin && modo === "nuevo" && (
         <div className="card">
           <h2>Nuevo producto</h2>
           <div className="campo">
@@ -367,7 +372,7 @@ export default function Catalogo() {
         </div>
       )}
 
-      {pendientes.length > 0 && (
+      {esAdmin && pendientes.length > 0 && (
         <div className="card">
           <h2>Cambios pendientes</h2>
           {pendientes.map((c) => (

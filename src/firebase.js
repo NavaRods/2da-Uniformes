@@ -27,8 +27,3 @@ export const db = initializeFirestore(app, {
     tabManager: persistentMultipleTabManager(),
   }),
 });
-
-export const ALLOWED_EMAILS = (import.meta.env.VITE_ALLOWED_EMAILS || "")
-  .split(",")
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);

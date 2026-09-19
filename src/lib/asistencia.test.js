@@ -8,10 +8,9 @@ vi.mock("firebase/firestore", () => ({
   writeBatch: () => batch,
   deleteField: () => "DELETE_FIELD",
   onSnapshot: vi.fn(),
-  collection: vi.fn(),
+  collectionGroup: vi.fn(),
   query: vi.fn(),
   where: vi.fn(),
-  documentId: vi.fn(),
   getDocs: vi.fn(),
 }));
 vi.mock("../firebase", () => ({ db: {} }));
@@ -60,11 +59,11 @@ describe("bajas", () => {
 });
 
 describe("marcarAsistencia", () => {
-  it("guarda el estado del día", async () => {
-    await marcarAsistencia("2026-09-10", { id: "a" }, "falta");
+  it("guarda el estado del día bajo la Unidad del elemento", async () => {
+    await marcarAsistencia("2026-09-10", { id: "a", unidad: "2da Unidad" }, "falta");
     expect(batch.set).toHaveBeenCalledWith(
-      { path: "asistencias/2026-09-10" },
-      { a: "falta" },
+      { path: "asistencias/2026-09-10/porUnidad/2da Unidad" },
+      { unidad: "2da Unidad", fecha: "2026-09-10", estados: { a: "falta" } },
       { merge: true }
     );
     expect(batch.update).not.toHaveBeenCalled();
@@ -72,7 +71,7 @@ describe("marcarAsistencia", () => {
   });
 
   it("baja registra la fecha en el elemento", async () => {
-    await marcarAsistencia("2026-09-10", { id: "a" }, "baja");
+    await marcarAsistencia("2026-09-10", { id: "a", unidad: "2da Unidad" }, "baja");
     expect(batch.update).toHaveBeenCalledWith(
       { path: "elementos/a" },
       { fechaBaja: "2026-09-10" }
@@ -82,7 +81,7 @@ describe("marcarAsistencia", () => {
   it("marcar otro estado después de una baja reactiva al elemento", async () => {
     await marcarAsistencia(
       "2026-09-17",
-      { id: "a", fechaBaja: "2026-09-10" },
+      { id: "a", unidad: "2da Unidad", fechaBaja: "2026-09-10" },
       "asistencia"
     );
     expect(batch.update).toHaveBeenCalledWith(
@@ -94,7 +93,7 @@ describe("marcarAsistencia", () => {
   it("marcar un día anterior a la baja no la toca", async () => {
     await marcarAsistencia(
       "2026-09-03",
-      { id: "a", fechaBaja: "2026-09-10" },
+      { id: "a", unidad: "2da Unidad", fechaBaja: "2026-09-10" },
       "falta"
     );
     expect(batch.update).not.toHaveBeenCalled();

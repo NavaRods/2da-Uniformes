@@ -1,5 +1,22 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "elementos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidad", "order": "ASCENDING" },
+        { "fieldPath": "nombre", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "porUnidad",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "unidad", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": [
     {
       "collectionGroup": "abonos",

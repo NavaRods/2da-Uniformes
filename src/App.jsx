@@ -10,12 +10,36 @@ import ReporteAsistencia from "./pages/ReporteAsistencia";
 import RelacionPagos from "./pages/RelacionPagos";
 import Catalogo from "./pages/Catalogo";
 import Uniformidad from "./pages/Uniformidad";
+import Usuarios from "./pages/Usuarios";
 import "./App.css";
 
-function Privado({ children }) {
-  const { user, loading } = useAuth();
+function Privado({ children, soloAdmin = false }) {
+  const { user, perfil, loading, logout } = useAuth();
   if (loading) return <p className="page">Cargando...</p>;
   if (!user) return <Navigate to="/login" replace />;
+  if (!perfil) {
+    return (
+      <div className="page">
+        <h1>Sin acceso</h1>
+        <p>Tu cuenta no tiene acceso a la app. Contacta a un administrador.</p>
+        <button className="btn-secondary" onClick={logout}>
+          Cerrar sesión
+        </button>
+      </div>
+    );
+  }
+  if (perfil.rol !== "admin" && !perfil.unidad) {
+    return (
+      <div className="page">
+        <h1>Sin Unidad asignada</h1>
+        <p>Tu cuenta todavía no tiene una Unidad asignada. Contacta a un administrador.</p>
+        <button className="btn-secondary" onClick={logout}>
+          Cerrar sesión
+        </button>
+      </div>
+    );
+  }
+  if (soloAdmin && perfil.rol !== "admin") return <Navigate to="/" replace />;
   return children;
 }
 
@@ -106,6 +130,14 @@ function AppRoutes() {
           element={
             <Privado>
               <Uniformidad />
+            </Privado>
+          }
+        />
+        <Route
+          path="/usuarios"
+          element={
+            <Privado soloAdmin>
+              <Usuarios />
             </Privado>
           }
         />

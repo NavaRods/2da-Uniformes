@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { crearElemento } from "../lib/elementos";
+import { listenUnidades } from "../lib/unidades";
+import { useAuth } from "../auth/AuthContext";
 import { TURNOS, FUENTES } from "../lib/opciones";
 
 const FORM_VACIO = {
-  unidad: "2da Unidad",
+  unidad: "",
   grupo: "Varonil",
   nombre: "",
   edad: "",
@@ -22,9 +24,17 @@ const FORM_VACIO = {
 };
 
 export default function FormElemento({ onCreado }) {
-  const [form, setForm] = useState(FORM_VACIO);
+  const { perfil } = useAuth();
+  const esAdmin = perfil?.rol === "admin";
+  const [unidades, setUnidades] = useState([]);
+  const [form, setForm] = useState(() => ({
+    ...FORM_VACIO,
+    unidad: esAdmin ? "" : perfil?.unidad || "",
+  }));
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => listenUnidades(setUnidades), []);
 
   function setCampo(campo, valor) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -51,12 +61,12 @@ export default function FormElemento({ onCreado }) {
 
   async function onSubmit(e) {
     e.preventDefault();
-    if (!form.nombre.trim()) return;
+    if (!form.nombre.trim() || !form.unidad) return;
     setGuardando(true);
     setError("");
     try {
       await crearElemento(form);
-      setForm(FORM_VACIO);
+      setForm({ ...FORM_VACIO, unidad: esAdmin ? "" : perfil?.unidad || "" });
       onCreado?.();
     } catch {
       setError("No se pudo guardar. Verifica tu conexión e inténtalo de nuevo.");
@@ -70,11 +80,20 @@ export default function FormElemento({ onCreado }) {
       <h2>Dar de alta a un elemento</h2>
 
       <div className="campo">
-        <label>Unidad</label>
-        <input
+        <label>Unidad *</label>
+        <select
           value={form.unidad}
           onChange={(e) => setCampo("unidad", e.target.value)}
-        />
+          disabled={!esAdmin}
+          required
+        >
+          <option value="">Selecciona...</option>
+          {unidades.map((u) => (
+            <option key={u.id} value={u.nombre}>
+              {u.nombre}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="campo">

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { listenElementos } from "../lib/elementos";
+import { listenUnidades } from "../lib/unidades";
 import { buscar } from "../lib/busqueda";
+import { useAuth } from "../auth/AuthContext";
 import FormElemento from "../components/FormElemento";
 import {
   ESTADOS,
@@ -13,6 +15,10 @@ import {
 } from "../lib/asistencia";
 
 export default function Asistencia() {
+  const { perfil } = useAuth();
+  const esAdmin = perfil?.rol === "admin";
+  const [unidades, setUnidades] = useState([]);
+  const [unidad, setUnidad] = useState(esAdmin ? "" : perfil?.unidad || "");
   const [elementos, setElementos] = useState([]);
   const [fecha, setFecha] = useState(fechaLocal());
   const [asistencia, setAsistencia] = useState({});
@@ -20,8 +26,14 @@ export default function Asistencia() {
   const [error, setError] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
 
-  useEffect(() => listenElementos(setElementos), []);
-  useEffect(() => listenAsistenciaDia(fecha, setAsistencia), [fecha]);
+  useEffect(() => {
+    if (esAdmin) return listenUnidades(setUnidades);
+  }, [esAdmin]);
+  useEffect(
+    () => listenElementos(setElementos, esAdmin ? unidad || undefined : unidad),
+    [esAdmin, unidad]
+  );
+  useEffect(() => listenAsistenciaDia(fecha, unidad, setAsistencia), [fecha, unidad]);
 
   async function cambiar(el, estado) {
     setError("");
@@ -34,9 +46,10 @@ export default function Asistencia() {
 
   // Sin búsqueda: solo la lista del día (sin las bajas anteriores).
   // Con búsqueda: se consulta a todos, incluidas las bajas.
+  const elementosDeUnidad = esAdmin ? elementos.filter((e) => !unidad || e.unidad === unidad) : elementos;
   const visibles = busqueda.trim()
-    ? buscar(elementos, busqueda, (el) => el.nombre)
-    : elementos.filter((el) => visibleEnLista(el, fecha));
+    ? buscar(elementosDeUnidad, busqueda, (el) => el.nombre)
+    : elementosDeUnidad.filter((el) => visibleEnLista(el, fecha));
 
   return (
     <div className="page">
@@ -52,54 +65,72 @@ export default function Asistencia() {
 
       {mostrarForm && <FormElemento onCreado={() => setMostrarForm(false)} />}
 
-      <div className="asistencia-controles">
-        <input
-          type="date"
-          value={fecha}
-          max={fechaLocal()}
-          onChange={(e) => e.target.value && setFecha(e.target.value)}
-        />
-        <input
-          type="search"
-          placeholder="Buscar elemento (incluye bajas)..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
-      </div>
-      {error && <p className="error">{error}</p>}
+      {esAdmin && (
+        <div className="campo">
+          <label>Unidad</label>
+          <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
+            <option value="">Selecciona una Unidad...</option>
+            {unidades.map((u) => (
+              <option key={u.id} value={u.nombre}>
+                {u.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
-      <ul className="lista">
-        {visibles.map((el) => {
-          const baja = estaDeBaja(el, fecha);
-          const estado = baja ? "baja" : normalizarEstado(asistencia[el.id]);
-          return (
-            <li key={el.id} className="asistencia-row">
-              <span>
-                {el.nombre}
-                {el.fechaBaja && (
-                  <span className="tag tag-baja">Baja {el.fechaBaja}</span>
-                )}
-              </span>
-              <select
-                value={estado}
-                onChange={(e) => cambiar(el, e.target.value)}
-                className={`estado estado-${estado || "sin"}`}
-                aria-label={`Estado de ${el.nombre}`}
-              >
-                <option value="" disabled>
-                  Sin marcar
-                </option>
-                {ESTADOS.map(([valor, etiqueta]) => (
-                  <option key={valor} value={valor}>
-                    {etiqueta}
-                  </option>
-                ))}
-              </select>
-            </li>
-          );
-        })}
-      </ul>
-      {visibles.length === 0 && <p className="nota">No hay elementos.</p>}
+      {(!esAdmin || unidad) && (
+        <>
+          <div className="asistencia-controles">
+            <input
+              type="date"
+              value={fecha}
+              max={fechaLocal()}
+              onChange={(e) => e.target.value && setFecha(e.target.value)}
+            />
+            <input
+              type="search"
+              placeholder="Buscar elemento (incluye bajas)..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+          </div>
+          {error && <p className="error">{error}</p>}
+
+          <ul className="lista">
+            {visibles.map((el) => {
+              const baja = estaDeBaja(el, fecha);
+              const estado = baja ? "baja" : normalizarEstado(asistencia[el.id]);
+              return (
+                <li key={el.id} className="asistencia-row">
+                  <span>
+                    {el.nombre}
+                    {el.fechaBaja && (
+                      <span className="tag tag-baja">Baja {el.fechaBaja}</span>
+                    )}
+                  </span>
+                  <select
+                    value={estado}
+                    onChange={(e) => cambiar(el, e.target.value)}
+                    className={`estado estado-${estado || "sin"}`}
+                    aria-label={`Estado de ${el.nombre}`}
+                  >
+                    <option value="" disabled>
+                      Sin marcar
+                    </option>
+                    {ESTADOS.map(([valor, etiqueta]) => (
+                      <option key={valor} value={valor}>
+                        {etiqueta}
+                      </option>
+                    ))}
+                  </select>
+                </li>
+              );
+            })}
+          </ul>
+          {visibles.length === 0 && <p className="nota">No hay elementos.</p>}
+        </>
+      )}
     </div>
   );
 }

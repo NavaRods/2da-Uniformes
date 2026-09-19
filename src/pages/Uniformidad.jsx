@@ -7,7 +7,7 @@ import { linkWhatsapp } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Uniformidad() {
-  const { user } = useAuth();
+  const { user, perfil } = useAuth();
   const [elementos, setElementos] = useState([]);
   const [catalogo, setCatalogo] = useState([]);
 
@@ -24,7 +24,10 @@ export default function Uniformidad() {
   const [cerrando, setCerrando] = useState(false);
   const [ventaCerrada, setVentaCerrada] = useState(false);
 
-  useEffect(() => listenElementos(setElementos), []);
+  useEffect(
+    () => listenElementos(setElementos, perfil?.rol === "admin" ? undefined : perfil?.unidad),
+    [perfil?.rol, perfil?.unidad]
+  );
   useEffect(() => listenCatalogo(setCatalogo), []);
 
   const producto = catalogo.find((p) => p.id === productoId);
