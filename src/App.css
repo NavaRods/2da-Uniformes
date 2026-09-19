@@ -638,3 +638,45 @@ th {
   font-size: 13px;
   margin-top: -8px;
 }
+
+/* --- Inicio: tarjetas de sección --- */
+.inicio-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.inicio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 24px 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  text-decoration: none;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.inicio-card:hover {
+  box-shadow: var(--shadow);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.inicio-icono {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.inicio-titulo {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.inicio-detalle {
+  font-size: 13px;
+  color: var(--text-muted);
+}

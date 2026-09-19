@@ -1,0 +1,26 @@
+import { Link } from "react-router-dom";
+
+const SECCIONES = [
+  ["/elementos", "👥", "Elementos", "Perfiles, datos y documentación"],
+  ["/asistencia", "✅", "Asistencia", "Pasar lista de cada sesión"],
+  ["/reporte-asistencia", "📊", "Reportes", "Resumen de asistencia"],
+  ["/pagos", "💵", "Relación de pagos", "Mensualidades e inscripciones"],
+  ["/uniformidad", "👕", "Uniformidad", "Pedidos, abonos y entregas"],
+];
+
+export default function Inicio() {
+  return (
+    <div className="page">
+      <h1>Uniformes Club</h1>
+      <div className="inicio-grid">
+        {SECCIONES.map(([to, icono, titulo, detalle]) => (
+          <Link key={to} to={to} className="inicio-card">
+            <span className="inicio-icono" aria-hidden="true">{icono}</span>
+            <span className="inicio-titulo">{titulo}</span>
+            <span className="inicio-detalle">{detalle}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}

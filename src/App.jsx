@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from "react
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { ThemeProvider, useTheme } from "./theme/ThemeContext";
 import Login from "./pages/Login";
+import Inicio from "./pages/Inicio";
 import Elementos from "./pages/Elementos";
 import ElementoPerfil from "./pages/ElementoPerfil";
 import Asistencia from "./pages/Asistencia";
@@ -24,25 +25,9 @@ function Nav() {
   const location = useLocation();
   if (!user) return null;
 
-  const links = [
-    ["/elementos", "Elementos"],
-    ["/asistencia", "Asistencia"],
-    ["/reporte-asistencia", "Reportes"],
-    ["/pagos", "Relación de pagos"],
-    ["/uniformidad", "Uniformidad"],
-  ];
-
   return (
     <nav className="nav">
-      {links.map(([to, label]) => (
-        <Link
-          key={to}
-          to={to}
-          className={location.pathname.startsWith(to) ? "activo" : ""}
-        >
-          {label}
-        </Link>
-      ))}
+      {location.pathname !== "/" && <Link to="/">← Inicio</Link>}
       <span className="nav-spacer" />
       <button className="theme-toggle" onClick={alternar} title="Cambiar tema">
         {tema === "dark" ? "☀️" : "🌙"}
@@ -60,6 +45,14 @@ function AppRoutes() {
       <Nav />
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={
+            <Privado>
+              <Inicio />
+            </Privado>
+          }
+        />
         <Route
           path="/elementos"
           element={
@@ -116,7 +109,7 @@ function AppRoutes() {
             </Privado>
           }
         />
-        <Route path="*" element={<Navigate to="/elementos" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

@@ -1,7 +1,10 @@
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Login() {
-  const { login, error } = useAuth();
+  const { user, loading, login, error } = useAuth();
+
+  if (!loading && user) return <Navigate to="/" replace />;
 
   return (
     <div className="login-screen">
