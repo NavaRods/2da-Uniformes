@@ -140,7 +140,7 @@ export async function registrarAbono(
 // elemento) y la "Relación de pagos General" (agregada, sin datos del
 // elemento). collectionGroup permite consultar todos los subcollections
 // "abonos" sin importar bajo qué elemento/pedido estén.
-export function listenAbonosDelDia(fechaLocal, callback) {
+export function listenAbonosDelDia(fechaLocal, callback, onError) {
   const ref = collectionGroup(db, "abonos");
   const q = query(ref, where("fechaLocal", "==", fechaLocal));
   return onSnapshot(q, (snap) => {
@@ -152,12 +152,12 @@ export function listenAbonosDelDia(fechaLocal, callback) {
         ...d.data(),
       }))
     );
-  });
+  }, onError);
 }
 
 // Todos los pedidos con un cambio de pieza pendiente (sin importar el día),
 // para que no se pierdan de vista hasta que se resuelvan.
-export function listenCambiosPendientes(callback) {
+export function listenCambiosPendientes(callback, onError) {
   const ref = collectionGroup(db, "pedidos");
   const q = query(ref, where("cambioPendiente", "==", true));
   return onSnapshot(q, (snap) => {
@@ -168,5 +168,5 @@ export function listenCambiosPendientes(callback) {
         ...d.data(),
       }))
     );
-  });
+  }, onError);
 }

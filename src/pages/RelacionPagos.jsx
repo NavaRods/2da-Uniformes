@@ -28,9 +28,56 @@ export default function RelacionPagos() {
   const [cambiosPendientes, setCambiosPendientes] = useState([]);
   const [vista, setVista] = useState("detalle"); // detalle | general | pendientes
   const [filtro, setFiltro] = useState("todos");
+  const [cargado, setCargado] = useState({ abonos: false, cuotas: false });
+  const [error, setError] = useState("");
 
-  useEffect(() => listenAbonosDelDia(fecha, setAbonos), [fecha]);
-  useEffect(() => listenCuotasDelDia(fecha, setCuotas), [fecha]);
+  const hoy = fechaLocalISO();
+
+  function cambiarFecha(nueva) {
+    // Nunca se muestran pagos de un día futuro.
+    if (nueva && nueva <= hoy) setFecha(nueva);
+  }
+
+  // Al cambiar de día se vacía lo del día anterior: si la consulta nueva tarda
+  // o falla, no deben seguir viéndose los datos viejos como si fueran de hoy.
+  useEffect(() => {
+    setAbonos([]);
+    setCuotas([]);
+    setFilas([]);
+    setError("");
+    setCargado({ abonos: false, cuotas: false });
+
+    function alFallar(e) {
+      console.error("Relación de pagos:", e);
+      setError(
+        e?.code === "failed-precondition"
+          ? "Falta un índice en Firestore o todavía se está creando. Espera unos minutos y recarga."
+          : "No se pudieron cargar los pagos de este día. Verifica tu conexión e inténtalo de nuevo."
+      );
+    }
+
+    const dejarAbonos = listenAbonosDelDia(
+      fecha,
+      (datos) => {
+        setAbonos(datos);
+        setCargado((c) => ({ ...c, abonos: true }));
+      },
+      alFallar
+    );
+    const dejarCuotas = listenCuotasDelDia(
+      fecha,
+      (datos) => {
+        setCuotas(datos);
+        setCargado((c) => ({ ...c, cuotas: true }));
+      },
+      alFallar
+    );
+    return () => {
+      dejarAbonos();
+      dejarCuotas();
+    };
+  }, [fecha]);
+
   useEffect(() => listenCambiosPendientes(setCambiosPendientes), []);
 
   useEffect(() => {
@@ -71,7 +118,8 @@ export default function RelacionPagos() {
 
   const resumen = resumenDia(filas);
   const visibles = filas.filter((f) => filtro === "todos" || f.tipo === filtro);
-  const esHoy = fecha === fechaLocalISO();
+  const esHoy = fecha === hoy;
+  const cargando = !error && !(cargado.abonos && cargado.cuotas);
 
   return (
     <div className="page">
@@ -81,7 +129,7 @@ export default function RelacionPagos() {
         <button
           type="button"
           className="btn-secondary"
-          onClick={() => setFecha(moverDia(fecha, -1))}
+          onClick={() => cambiarFecha(moverDia(fecha, -1))}
           aria-label="Día anterior"
         >
           ‹
@@ -90,24 +138,29 @@ export default function RelacionPagos() {
           <input
             type="date"
             value={fecha}
-            onChange={(e) => e.target.value && setFecha(e.target.value)}
+            max={hoy}
+            onChange={(e) => cambiarFecha(e.target.value)}
           />
           <span className="dia-etiqueta">{etiquetaDia(fecha)}</span>
         </div>
         <button
           type="button"
           className="btn-secondary"
-          onClick={() => setFecha(moverDia(fecha, 1))}
+          onClick={() => cambiarFecha(moverDia(fecha, 1))}
+          disabled={esHoy}
           aria-label="Día siguiente"
         >
           ›
         </button>
         {!esHoy && (
-          <button type="button" className="btn-secondary" onClick={() => setFecha(fechaLocalISO())}>
+          <button type="button" className="btn-secondary" onClick={() => setFecha(hoy)}>
             Hoy
           </button>
         )}
       </div>
+
+      {error && <p className="error">{error}</p>}
+      {cargando && <p className="nota">Cargando pagos…</p>}
 
       <div className="tarjetas-resumen">
         <div className="card tarjeta-total">
@@ -167,7 +220,9 @@ export default function RelacionPagos() {
             ))}
           </div>
 
-          {visibles.length === 0 && <p className="nota">Sin pagos registrados este día.</p>}
+          {!cargando && !error && visibles.length === 0 && (
+            <p className="nota">Sin pagos registrados este día.</p>
+          )}
           <ul className="pagos">
             {visibles.map((f) => (
               <li key={f.id} className="pago">
@@ -195,7 +250,7 @@ export default function RelacionPagos() {
       {vista === "general" && (
         <>
           <p className="nota">Solo piezas, tallas y montos — sin datos de elementos.</p>
-          {resumen.general.length === 0 && resumen.mesesCobrados === 0 && (
+          {!cargando && !error && resumen.general.length === 0 && resumen.mesesCobrados === 0 && (
             <p className="nota">Sin movimientos este día.</p>
           )}
           <ul className="pagos">

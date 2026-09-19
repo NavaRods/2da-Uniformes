@@ -73,7 +73,7 @@ export function listenCuotas(elementoId, callback) {
 
 // Todas las mensualidades cobradas en un día (de cualquier elemento), para la
 // Relación de pagos.
-export function listenCuotasDelDia(fecha, callback) {
+export function listenCuotasDelDia(fecha, callback, onError) {
   const q = query(collectionGroup(db, "cuotas"), where("fechaLocal", "==", fecha));
   return onSnapshot(q, (snap) => {
     callback(
@@ -83,7 +83,7 @@ export function listenCuotasDelDia(fecha, callback) {
         ...d.data(),
       }))
     );
-  });
+  }, onError);
 }
 
 export async function registrarMensualidad(elementoId, { meses, montoPorMes, quienRecibio }) {
