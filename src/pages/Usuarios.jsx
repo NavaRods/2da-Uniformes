@@ -7,7 +7,13 @@ import {
   cambiarActivo,
   ROLES,
 } from "../lib/usuarios";
-import { listenUnidades, crearUnidad } from "../lib/unidades";
+import {
+  listenUnidades,
+  crearUnidad,
+  cargarUnidadesIniciales,
+  UNIDADES_INICIALES,
+  RENOMBRES,
+} from "../lib/unidades";
 import { migrarDatosAnteriores } from "../lib/migracion";
 import { useAuth } from "../auth/AuthContext";
 
@@ -77,6 +83,37 @@ export default function Usuarios() {
       );
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function onCargarUnidades() {
+    const [[desde, hacia]] = Object.entries(RENOMBRES);
+    if (
+      !confirm(
+        `Se crearán las Unidades que falten de la lista (${UNIDADES_INICIALES.length} en total), ` +
+          `los elementos que hoy están en "${desde}" pasarán a "${hacia}", y después se actualizarán ` +
+          "pedidos, pagos, mensualidades y asistencia anterior. Se puede repetir sin problema. ¿Continuar?"
+      )
+    ) {
+      return;
+    }
+    setMigrando(true);
+    setResultadoMigracion("");
+    try {
+      const u = await cargarUnidadesIniciales();
+      const r = await migrarDatosAnteriores();
+      setResultadoMigracion(
+        `Listo. Unidades creadas: ${u.creadas} (ya existían ${u.yaExistian}). ` +
+          `Elementos pasados de "${desde}" a "${hacia}": ${u.renombrados}. ` +
+          `Actualizados: ${r.pedidos} pedidos, ${r.abonos} abonos, ${r.cuotas} mensualidades. ` +
+          `Días de asistencia anterior migrados: ${r.asistencias}` +
+          (r.omitidos ? ` (${r.omitidos} registros sin Unidad se dejaron sin tocar).` : ".")
+      );
+    } catch (e) {
+      console.error("Carga de Unidades:", e);
+      setResultadoMigracion("No se pudo completar. Inténtalo de nuevo; lo ya hecho no se repite.");
+    } finally {
+      setMigrando(false);
     }
   }
 
@@ -281,12 +318,18 @@ export default function Usuarios() {
       <div className="card">
         <h2>Mantenimiento</h2>
         <p className="nota">
-          Si la app tenía datos antes de que existieran las Unidades, este botón les asigna la de su
-          elemento y pasa la asistencia anterior al formato nuevo. Solo hace falta una vez.
+          <strong>Cargar lista de Unidades</strong> crea las {UNIDADES_INICIALES.length} Unidades del
+          club ({UNIDADES_INICIALES.join(", ")}), pasa los elementos que estaban en "2da Unidad" a
+          "2a" y actualiza los datos anteriores. Solo hace falta una vez.
         </p>
-        <button className="btn-secondary" onClick={onMigrar} disabled={migrando}>
-          {migrando ? "Actualizando..." : "Actualizar datos anteriores"}
-        </button>
+        <div className="inline-form">
+          <button className="btn-primary" onClick={onCargarUnidades} disabled={migrando}>
+            {migrando ? "Trabajando..." : "Cargar lista de Unidades"}
+          </button>
+          <button className="btn-secondary" onClick={onMigrar} disabled={migrando}>
+            Solo actualizar datos anteriores
+          </button>
+        </div>
         {resultadoMigracion && <p className="nota">{resultadoMigracion}</p>}
       </div>
     </div>

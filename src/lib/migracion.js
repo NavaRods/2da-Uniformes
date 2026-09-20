@@ -8,8 +8,9 @@ import { db } from "../firebase";
 import { normalizarEstado } from "./asistencia";
 
 // Migración única, para datos creados antes de la separación por Unidad:
-//  1. Pedidos, abonos y cuotas sin "unidad" reciben la de su elemento (las
-//     consultas de la Relación de pagos filtran por ese campo).
+//  1. Pedidos, abonos y cuotas sin "unidad" (o con una distinta a la de su
+//     elemento, p. ej. tras renombrar una Unidad) reciben la de su elemento
+//     (las consultas de la Relación de pagos filtran por ese campo).
 //  2. La asistencia en formato anterior (un doc plano por día con todos los
 //     elementos) pasa a un doc por día y Unidad.
 // Es idempotente: se puede correr de nuevo sin duplicar ni pisar nada.
@@ -66,13 +67,13 @@ export async function migrarDatosAnteriores() {
 
     const pedidos = await getDocs(collection(db, ...base, "pedidos"));
     for (const pedido of pedidos.docs) {
-      if (!pedido.data().unidad) {
+      if (pedido.data().unidad !== unidad) {
         await lotes.agregar((l) => l.update(pedido.ref, { unidad }));
         resumen.pedidos += 1;
       }
       const abonos = await getDocs(collection(db, ...base, "pedidos", pedido.id, "abonos"));
       for (const abono of abonos.docs) {
-        if (!abono.data().unidad) {
+        if (abono.data().unidad !== unidad) {
           await lotes.agregar((l) => l.update(abono.ref, { unidad }));
           resumen.abonos += 1;
         }
@@ -81,7 +82,7 @@ export async function migrarDatosAnteriores() {
 
     const cuotas = await getDocs(collection(db, ...base, "cuotas"));
     for (const cuota of cuotas.docs) {
-      if (!cuota.data().unidad) {
+      if (cuota.data().unidad !== unidad) {
         await lotes.agregar((l) => l.update(cuota.ref, { unidad }));
         resumen.cuotas += 1;
       }
