@@ -1,4 +1,5 @@
 import { fechaHoraActual, formatoMoneda } from "./format";
+import { CATEGORIAS } from "./grados";
 
 export function linkWhatsapp(telefono, mensaje) {
   const numero = (telefono || "").replace(/\D/g, "");
@@ -103,5 +104,24 @@ export function mensajeRelacionDia({ fechaEtiqueta, resumen }) {
   }
 
   partes.push(`Total: ${pesos(resumen.total)}`);
+  return partes.join("\n\n");
+}
+
+// Estado de Fuerza del día para mandar por WhatsApp. `fuerza` viene de
+// estadoDeFuerza() en lib/grados.js.
+export function mensajeEstadoFuerza({ unidad, fechaEtiqueta, fuerza, novedades }) {
+  const fecha = fechaEtiqueta.charAt(0).toUpperCase() + fechaEtiqueta.slice(1);
+  const bloque = (titulo, cuenta) => {
+    const lineas = CATEGORIAS.map((c) => `${c}: ${cuenta[c]}`);
+    if (cuenta.sinGrado > 0) lineas.push(`Sin grado: ${cuenta.sinGrado}`);
+    return `${titulo}\n${lineas.join("\n")}\nTotal ${titulo.toLowerCase()}: ${cuenta.total}`;
+  };
+  const partes = [
+    `ESTADO DE FUERZA\nUnidad: ${unidad}\n${fecha}`,
+    bloque("VARONIL", fuerza.Varonil),
+    bloque("FEMENINO", fuerza.Femenino),
+    `TOTAL GENERAL: ${fuerza.totalGeneral}`,
+  ];
+  if (novedades?.trim()) partes.push(`Novedades:\n${novedades.trim()}`);
   return partes.join("\n\n");
 }

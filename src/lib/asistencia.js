@@ -3,10 +3,7 @@ import {
   writeBatch,
   deleteField,
   onSnapshot,
-  collectionGroup,
-  query,
-  where,
-  getDocs,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -75,21 +72,52 @@ export async function marcarAsistencia(fecha, elemento, estado) {
   await batch.commit();
 }
 
-// Lista de asistencia de un mes completo (yyyy-mm) de una Unidad, generada a
-// demanda. Devuelve { "2026-08-01": { elementoId: estado, ... }, ... }
-export async function obtenerAsistenciasMes(yyyyMm, unidad) {
+// Da de baja a un elemento: queda con estado "baja" ese día y sale de las
+// listas posteriores. No se borra nada; puede reactivarse.
+export async function darDeBaja(elemento, fecha = fechaLocal()) {
+  return marcarAsistencia(fecha, elemento, "baja");
+}
+
+// Reactiva a un elemento dado de baja: quita su fechaBaja y el estado "baja"
+// que quedó marcado ese día.
+export async function reactivarElemento(elemento) {
+  const batch = writeBatch(db);
+  batch.update(doc(db, "elementos", elemento.id), { fechaBaja: deleteField() });
+  if (elemento.fechaBaja) {
+    batch.set(
+      diaUnidadRef(elemento.fechaBaja, elemento.unidad),
+      {
+        unidad: elemento.unidad,
+        fecha: elemento.fechaBaja,
+        estados: { [elemento.id]: deleteField() },
+      },
+      { merge: true }
+    );
+  }
+  await batch.commit();
+}
+
+// Los domingos de un mes (yyyy-mm) como fechas yyyy-mm-dd. El reporte de
+// asistencia solo lleva estos días.
+export function domingosDelMes(yyyyMm) {
+  const [anio, mes] = yyyyMm.split("-").map(Number);
+  const dias = new Date(anio, mes, 0).getDate();
+  const domingos = [];
+  for (let d = 1; d <= dias; d++) {
+    if (new Date(anio, mes - 1, d).getDay() === 0) domingos.push(fechaLocal(new Date(anio, mes - 1, d)));
+  }
+  return domingos;
+}
+
+// Asistencia de varios días de una Unidad. Devuelve { "2026-09-06": { elementoId: estado }, ... }
+// Se leen los documentos por fecha (no una consulta de grupo), así solo hace falta
+// el permiso de lectura de cada día de la Unidad.
+export async function obtenerAsistenciasDias(fechas, unidad) {
   if (!unidad) return {};
-  const ref = collectionGroup(db, "porUnidad");
-  const q = query(
-    ref,
-    where("unidad", "==", unidad),
-    where("fecha", ">=", `${yyyyMm}-01`),
-    where("fecha", "<=", `${yyyyMm}-31`)
-  );
-  const snap = await getDocs(q);
+  const snaps = await Promise.all(fechas.map((f) => getDoc(diaUnidadRef(f, unidad))));
   const resultado = {};
-  snap.forEach((d) => {
-    resultado[d.data().fecha] = d.data().estados || {};
+  snaps.forEach((snap, i) => {
+    resultado[fechas[i]] = snap.exists() ? snap.data().estados || {} : {};
   });
   return resultado;
 }

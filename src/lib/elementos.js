@@ -28,6 +28,8 @@ export async function crearElemento(datos) {
     unidad: datos.unidad,
     grupo: datos.grupo || "Varonil",
     nombre: datos.nombre,
+    numeroOrden: datos.numeroOrden || "",
+    gradoMilitar: datos.gradoMilitar || "",
     edad: datos.edad || null,
     telefonos: datos.telefonos?.filter(Boolean) || [],
     direccion: datos.direccion || "",
@@ -39,6 +41,10 @@ export async function crearElemento(datos) {
     comoSeEntero: datos.comoSeEntero || "",
     seguroSocial: datos.seguroSocial || "",
     alergias: datos.alergias || "",
+    antecedentes: datos.antecedentes || "",
+    antecedentesDetalle: datos.antecedentesDetalle || "",
+    practicaDeporte: datos.practicaDeporte || "",
+    deporte: datos.deporte || "",
     pagaMensualidad: !!datos.pagaMensualidad,
     pagaInscripcion: !!datos.pagaInscripcion,
     creadoEn: serverTimestamp(),
@@ -48,3 +54,7 @@ export async function crearElemento(datos) {
 export async function actualizarElemento(elementoId, cambios) {
   return updateDoc(doc(db, "elementos", elementoId), cambios);
 }
+
+// Un elemento dado de baja tiene fechaBaja (ver darDeBaja en lib/asistencia.js).
+// Sale de las listas de elementos y aparece en el apartado de Bajas.
+export const estaActivo = (elemento) => !elemento.fechaBaja;

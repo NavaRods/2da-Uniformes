@@ -14,7 +14,8 @@ import { formatoMoneda } from "../lib/format";
 import { useAuth } from "../auth/AuthContext";
 
 export default function CuotaMensualidad({ elemento, cuotas }) {
-  const { user } = useAuth();
+  const { user, perfil } = useAuth();
+  const esAdmin = perfil?.rol === "admin";
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [seleccion, setSeleccion] = useState([]);
   const [precio, setPrecio] = useState(String(MENSUALIDAD_DEFAULT));
@@ -164,9 +165,11 @@ export default function CuotaMensualidad({ elemento, cuotas }) {
                   {c.horaLocal || ""} · {c.quienRecibio}
                 </span>
               </div>
-              <button type="button" className="btn-secondary btn-small" onClick={() => onEliminar(c)}>
-                Eliminar
-              </button>
+              {esAdmin && (
+                <button type="button" className="btn-secondary btn-small" onClick={() => onEliminar(c)}>
+                  Eliminar
+                </button>
+              )}
             </li>
           ))}
         </ul>

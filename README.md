@@ -69,3 +69,46 @@ Qué cubren:
 
 Antes de subir un cambio a la lógica de `src/lib/`, corre `npm test` para
 confirmar que nada se rompió.
+
+### Pruebas de las reglas de seguridad
+
+`firestore.rules` se prueba contra el emulador de Firestore (necesita Java
+instalado). Verifican, por ejemplo, que un Operador no lea otra Unidad, que un
+abono solo se cree junto con el descuento exacto en el saldo, y que solo un
+Admin borre pagos.
+
+```bash
+npm run test:rules
+```
+
+Corre esto cada vez que cambies `firestore.rules`.
+
+## Seguridad
+
+- **Reglas de Firestore** (`firestore.rules`): roles Admin/Operador, datos
+  separados por Unidad, saldo y abonos atados entre sí, precio de pedidos fijo,
+  y borrado de pagos/elementos solo para Admin.
+- **App Check** (opcional pero recomendado): crea una clave de *reCAPTCHA
+  Enterprise* para tu dominio, regístrala en Firebase Console > App Check >
+  Apps, y pon la clave en `.env` como `VITE_RECAPTCHA_SITE_KEY`. En desarrollo,
+  el navegador imprime un *debug token* en la consola: agrégalo en App Check >
+  Administrar tokens de depuración. Cuando la app ya envíe tokens válidos,
+  activa "Aplicar" (enforce) para Cloud Firestore.
+- **Consola de Firebase / Google Cloud** (no se puede hacer desde el código):
+  restringir la API key por referrer HTTP, dejar solo tus dominios en
+  Authentication > Configuración > Dominios autorizados, dejar solo Google
+  como proveedor de acceso, y configurar alertas de presupuesto.
+
+## Elementos, bajas, Estado de Fuerza y reportes
+
+- **Bajas:** un elemento no se elimina; se da de baja (desde su perfil o desde
+  Asistencia) y pasa a la pestaña *Bajas*, de donde se puede reactivar.
+- **Grados militares:** se administran en *Configuración > Grados* (solo Admin).
+  Mientras no se carguen a Firestore se usan los predeterminados. Cada grado
+  tiene una categoría (Jefes, Oficiales, Clases, Cadetes, Tropas, Reclutas) que
+  define el renglón del Estado de Fuerza.
+- **Estado de Fuerza:** en Asistencia, pestaña *Estado de Fuerza*: conteo por
+  categoría de Varonil y Femenino, totales y novedades opcionales, para enviar
+  por WhatsApp. Cuenta a los elementos de la lista del día seleccionado.
+- **Reporte de asistencia:** columnas Unidad, No. de orden, Grado, Nombre y los
+  domingos del mes, con marcas A, F, FJ y B; se puede descargar en PDF.

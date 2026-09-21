@@ -69,6 +69,23 @@ service cloud.firestore {
       allow delete: if esAdmin();
     }
 
+    // --- Grados militares ---
+    // Los administra un Admin desde Configuración; todos los usuarios los leen
+    // (formularios, Estado de Fuerza). "categoria" es el renglón del Estado de
+    // Fuerza en que se cuenta el grado; "rango" mayor = jerarquía más alta.
+    function gradoValido(datos) {
+      return datos.keys().hasOnly(["nombre", "categoria", "rango", "creadoEn"]) &&
+        datos.nombre is string && datos.nombre.size() > 0 &&
+        datos.categoria in ["Jefes", "Oficiales", "Clases", "Cadetes", "Tropas", "Reclutas"] &&
+        datos.rango is number;
+    }
+
+    match /grados/{gradoId} {
+      allow read: if esUsuarioAutorizado();
+      allow create, update: if esAdmin() && gradoValido(request.resource.data);
+      allow delete: if esAdmin();
+    }
+
     // --- Elementos ---
     function elementoValido(datos) {
       return datos.keys().hasOnly([
@@ -77,7 +94,9 @@ service cloud.firestore {
         "comoSeEntero", "seguroSocial", "alergias", "pagaMensualidad",
         // documentacionEntregada ya no se usa; se permite solo para no rechazar
         // elementos antiguos que todavía lo tengan guardado.
-        "pagaInscripcion", "documentacionEntregada", "fechaBaja", "creadoEn"
+        "pagaInscripcion", "documentacionEntregada", "fechaBaja", "creadoEn",
+        "numeroOrden", "gradoMilitar", "antecedentes", "antecedentesDetalle",
+        "practicaDeporte", "deporte"
       ]) &&
       datos.nombre is string && datos.nombre.size() > 0 &&
       datos.unidad is string && datos.unidad.size() > 0 &&
@@ -86,7 +105,14 @@ service cloud.firestore {
       (!("pagaMensualidad" in datos) || datos.pagaMensualidad is bool) &&
       (!("pagaInscripcion" in datos) || datos.pagaInscripcion is bool) &&
       (!("documentacionEntregada" in datos) || datos.documentacionEntregada is bool) &&
-      (!("fechaBaja" in datos) || datos.fechaBaja is string);
+      (!("fechaBaja" in datos) || datos.fechaBaja is string) &&
+      // Número de orden opcional: V/F + unidad (2) + año (2) + lista (3). Ej. V0218001.
+      (!("numeroOrden" in datos) || (datos.numeroOrden is string && datos.numeroOrden.matches('^([VF][0-9]{7})?$'))) &&
+      (!("gradoMilitar" in datos) || datos.gradoMilitar is string) &&
+      (!("antecedentes" in datos) || datos.antecedentes in ["", "Sí", "No"]) &&
+      (!("antecedentesDetalle" in datos) || datos.antecedentesDetalle is string) &&
+      (!("practicaDeporte" in datos) || datos.practicaDeporte in ["", "Sí", "No"]) &&
+      (!("deporte" in datos) || datos.deporte is string);
     }
 
     match /elementos/{elementoId} {
@@ -94,7 +120,9 @@ service cloud.firestore {
       allow create: if elementoValido(request.resource.data) && enMiUnidad(request.resource.data.unidad);
       allow update: if elementoValido(request.resource.data) &&
         enMiUnidad(resource.data.unidad) && enMiUnidad(request.resource.data.unidad);
-      allow delete: if enMiUnidad(resource.data.unidad);
+      // Las bajas normales se marcan con fechaBaja; borrar un elemento (y con
+      // eso su historial) es cosa de un Admin.
+      allow delete: if esAdmin();
 
       // --- Pedidos de un elemento ---
       function pedidoValido(datos) {
@@ -102,13 +130,37 @@ service cloud.firestore {
           "articulo", "productoNombre", "talla", "color", "cantidad",
           "precioTotal", "saldoPendiente", "entregado", "quienEntrego",
           "fechaEntrega", "cambioPendiente", "motivoCambio",
-          "fechaCambioSolicitado", "creadoEn"
+          "fechaCambioSolicitado", "ultimoAbonoId", "creadoEn"
         ]) &&
         datos.articulo is string &&
         datos.precioTotal is number &&
         datos.saldoPendiente is number &&
         (!("cambioPendiente" in datos) || datos.cambioPendiente is bool) &&
         (!("entregado" in datos) || datos.entregado is bool);
+      }
+
+      // El saldo de un pedido solo baja junto con un abono nuevo: en la misma
+      // escritura (batch) se crea el abono cuyo ID queda en "ultimoAbonoId" y
+      // su monto es exactamente lo que bajó el saldo. Así nadie puede poner
+      // el saldo en 0 "a mano" ni crear un abono sin descontarlo.
+      function saldoBajaPorAbono(elementoId, pedidoId, antes, despues) {
+        return despues.get("ultimoAbonoId", "") is string &&
+          despues.get("ultimoAbonoId", "") != "" &&
+          despues.get("ultimoAbonoId", "") != antes.get("ultimoAbonoId", "") &&
+          !exists(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)/abonos/$(despues.ultimoAbonoId)) &&
+          existsAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)/abonos/$(despues.ultimoAbonoId)) &&
+          getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)/abonos/$(despues.ultimoAbonoId)).data.monto ==
+            antes.saldoPendiente - despues.saldoPendiente;
+      }
+
+      // Campos de un pedido que sí pueden cambiar después de creado. El precio,
+      // el artículo, la fecha de creación, etc. quedan fijos.
+      function pedidoSoloCambiaPermitido(antes, despues) {
+        return despues.diff(antes).affectedKeys().hasOnly([
+          "entregado", "quienEntrego", "fechaEntrega",
+          "cambioPendiente", "motivoCambio", "fechaCambioSolicitado",
+          "saldoPendiente", "ultimoAbonoId"
+        ]);
       }
 
       // --- Cuotas (mensualidades pagadas) de un elemento ---
@@ -120,37 +172,63 @@ service cloud.firestore {
         datos.tipo == "mensualidad" &&
         datos.meses is list && datos.meses.size() > 0 &&
         datos.montoPorMes is number && datos.montoPorMes > 0 &&
-        datos.total is number &&
+        datos.total is number && datos.total == datos.montoPorMes * datos.meses.size() &&
         datos.fechaLocal is string;
       }
 
       match /cuotas/{cuotaId} {
         allow read: if enMiUnidad(unidadDelElemento(elementoId));
         allow create: if cuotaValida(request.resource.data) && enMiUnidad(unidadDelElemento(elementoId));
-        // Un pago mal registrado se elimina y se vuelve a capturar; no se edita.
+        // Un pago mal registrado no se edita. Solo un Admin puede borrarlo
+        // (rastro de auditoría) y luego se vuelve a capturar.
         allow update: if false;
-        allow delete: if enMiUnidad(unidadDelElemento(elementoId));
+        allow delete: if esAdmin();
       }
 
       match /pedidos/{pedidoId} {
         allow read: if enMiUnidad(unidadDelElemento(elementoId));
-        allow create, update: if pedidoValido(request.resource.data) && enMiUnidad(unidadDelElemento(elementoId));
-        allow delete: if enMiUnidad(unidadDelElemento(elementoId));
+
+        // Un pedido nace sin pagos: el saldo es el precio completo.
+        allow create: if pedidoValido(request.resource.data) &&
+          enMiUnidad(unidadDelElemento(elementoId)) &&
+          request.resource.data.precioTotal >= 0 &&
+          request.resource.data.saldoPendiente == request.resource.data.precioTotal &&
+          !("ultimoAbonoId" in request.resource.data);
+
+        allow update: if pedidoValido(request.resource.data) &&
+          enMiUnidad(unidadDelElemento(elementoId)) &&
+          pedidoSoloCambiaPermitido(resource.data, request.resource.data) &&
+          (request.resource.data.saldoPendiente == resource.data.saldoPendiente ||
+            saldoBajaPorAbono(elementoId, pedidoId, resource.data, request.resource.data));
+
+        // Un pedido sin pagos (saldo = precio) lo puede borrar cualquiera de
+        // la Unidad, p. ej. uno capturado por error. Si ya tiene pagos, solo
+        // un Admin.
+        allow delete: if enMiUnidad(unidadDelElemento(elementoId)) &&
+          (esAdmin() || resource.data.saldoPendiente == resource.data.precioTotal);
 
         // --- Abonos de un pedido ---
         function abonoValido(datos) {
           return datos.keys().hasOnly(["monto", "quienRecibio", "fecha", "fechaLocal", "horaLocal"]) &&
-          datos.monto is number &&
+          datos.monto is number && datos.monto > 0 &&
           datos.fechaLocal is string;
         }
 
         match /abonos/{abonoId} {
           allow read: if enMiUnidad(unidadDelElemento(elementoId));
-          allow create: if abonoValido(request.resource.data) && enMiUnidad(unidadDelElemento(elementoId));
-          // Los abonos no se editan. Solo se borran al eliminar el pedido
-          // completo (la app los borra junto con el pedido).
+
+          // Un abono solo se crea junto con el descuento exacto en el saldo
+          // del pedido (ver saldoBajaPorAbono).
+          allow create: if abonoValido(request.resource.data) &&
+            enMiUnidad(unidadDelElemento(elementoId)) &&
+            getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.get("ultimoAbonoId", "") == abonoId &&
+            getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente ==
+              get(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente - request.resource.data.monto;
+
+          // Los abonos no se editan, y solo un Admin los borra (al eliminar un
+          // pedido que ya tenía pagos).
           allow update: if false;
-          allow delete: if enMiUnidad(unidadDelElemento(elementoId));
+          allow delete: if esAdmin();
         }
       }
     }

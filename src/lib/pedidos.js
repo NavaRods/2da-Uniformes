@@ -8,7 +8,7 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  increment,
+  getDoc,
   where,
   getDocs,
   writeBatch,
@@ -109,31 +109,38 @@ export function listenAbonosDePedido(elementoId, pedidoId, callback) {
 // descontando con cada abono hasta llegar a 0 (o menos), momento en el que
 // el pedido queda "liquidado" — esto se sigue evaluando en cada pantalla a
 // partir de saldoPendiente, nunca hay que "cerrar" el pedido a mano.
+//
+// El abono y el nuevo saldo se guardan en un solo batch (todo o nada). Las
+// reglas de Firestore exigen esa pareja: un abono sin el descuento exacto en
+// el saldo (o un saldo que baja sin abono) se rechaza. Por eso el saldo se
+// calcula aquí (saldo actual - monto) y no con increment(), y el pedido guarda
+// el ID del abono en "ultimoAbonoId" para que las reglas puedan enlazarlos.
 export async function registrarAbono(
   elementoId,
   pedidoId,
   { monto, quienRecibio }
 ) {
-  const abonosRef = collection(
-    db,
-    "elementos",
-    elementoId,
-    "pedidos",
-    pedidoId,
-    "abonos"
-  );
-  await addDoc(abonosRef, {
-    monto: Number(monto),
+  const importe = Number(monto);
+  if (!(importe > 0)) throw new Error("El abono debe ser mayor a $0.");
+
+  const pedidoRef = doc(db, "elementos", elementoId, "pedidos", pedidoId);
+  const pedido = await getDoc(pedidoRef);
+  const saldoActual = pedido.data().saldoPendiente;
+
+  const abonoRef = doc(collection(pedidoRef, "abonos"));
+  const batch = writeBatch(db);
+  batch.set(abonoRef, {
+    monto: importe,
     quienRecibio: quienRecibio || "",
     fecha: serverTimestamp(),
     fechaLocal: fechaLocalISO(),
     horaLocal: horaLocalHHMM(),
   });
-
-  const pedidoRef = doc(db, "elementos", elementoId, "pedidos", pedidoId);
-  await updateDoc(pedidoRef, {
-    saldoPendiente: increment(-Number(monto)),
+  batch.update(pedidoRef, {
+    saldoPendiente: saldoActual - importe,
+    ultimoAbonoId: abonoRef.id,
   });
+  await batch.commit();
 }
 
 // Todos los pagos (abonos) del día, para la "Relación de pagos" (detalle por

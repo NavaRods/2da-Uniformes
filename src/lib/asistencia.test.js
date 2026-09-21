@@ -11,11 +11,13 @@ vi.mock("firebase/firestore", () => ({
   collectionGroup: vi.fn(),
   query: vi.fn(),
   where: vi.fn(),
-  getDocs: vi.fn(),
+  getDoc: vi.fn(),
 }));
 vi.mock("../firebase", () => ({ db: {} }));
 
 const {
+  darDeBaja,
+  reactivarElemento,
   marcarAsistencia,
   normalizarEstado,
   visibleEnLista,
@@ -97,5 +99,28 @@ describe("marcarAsistencia", () => {
       "falta"
     );
     expect(batch.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("darDeBaja y reactivarElemento", () => {
+  it("dar de baja marca el día y registra la fecha en el elemento", async () => {
+    await darDeBaja({ id: "a", unidad: "2da Unidad" }, "2026-09-10");
+    expect(batch.update).toHaveBeenCalledWith({ path: "elementos/a" }, { fechaBaja: "2026-09-10" });
+    expect(batch.set).toHaveBeenCalledWith(
+      { path: "asistencias/2026-09-10/porUnidad/2da Unidad" },
+      { unidad: "2da Unidad", fecha: "2026-09-10", estados: { a: "baja" } },
+      { merge: true }
+    );
+  });
+
+  it("reactivar quita la baja del elemento y el estado que quedó ese día", async () => {
+    await reactivarElemento({ id: "a", unidad: "2da Unidad", fechaBaja: "2026-09-10" });
+    expect(batch.update).toHaveBeenCalledWith({ path: "elementos/a" }, { fechaBaja: "DELETE_FIELD" });
+    expect(batch.set).toHaveBeenCalledWith(
+      { path: "asistencias/2026-09-10/porUnidad/2da Unidad" },
+      { unidad: "2da Unidad", fecha: "2026-09-10", estados: { a: "DELETE_FIELD" } },
+      { merge: true }
+    );
+    expect(batch.commit).toHaveBeenCalled();
   });
 });

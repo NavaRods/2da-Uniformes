@@ -1075,3 +1075,58 @@ th {
   font-size: 18px;
   padding: 8px 14px;
 }
+
+/* --- Formulario de elementos: encabezado con cierre y errores por campo --- */
+.form-encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.form-encabezado h2 {
+  margin: 0;
+}
+
+.btn-cerrar {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--text-muted, inherit);
+}
+
+.btn-cerrar:hover {
+  color: var(--primary);
+}
+
+.campo-con-error input,
+.campo-con-error select,
+.campo-con-error textarea {
+  border-color: var(--danger, #dc2626);
+}
+
+.error-campo {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--danger, #dc2626);
+}
+
+/* --- Filas con botón (bajas, configuración) --- */
+.fila-baja {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fila-baja .fila-lista {
+  flex: 1;
+  min-width: 0;
+}
+
+.estado-fuerza tfoot th {
+  border-top: 2px solid currentColor;
+}

@@ -4,6 +4,10 @@ import { listenUnidades } from "../lib/unidades";
 import { buscar } from "../lib/busqueda";
 import { useAuth } from "../auth/AuthContext";
 import FormElemento from "../components/FormElemento";
+import ListaBajas from "../components/ListaBajas";
+import EstadoFuerza from "../components/EstadoFuerza";
+import { useGrados } from "../lib/gradosDb";
+import { comparadorPorJerarquia } from "../lib/grados";
 import {
   ESTADOS,
   fechaLocal,
@@ -25,6 +29,8 @@ export default function Asistencia() {
   const [busqueda, setBusqueda] = useState("");
   const [error, setError] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
+  const [vista, setVista] = useState("lista"); // lista | fuerza | bajas
+  const grados = useGrados();
 
   useEffect(() => {
     if (esAdmin) return listenUnidades(setUnidades);
@@ -47,9 +53,15 @@ export default function Asistencia() {
   // Sin búsqueda: solo la lista del día (sin las bajas anteriores).
   // Con búsqueda: se consulta a todos, incluidas las bajas.
   const elementosDeUnidad = esAdmin ? elementos.filter((e) => !unidad || e.unidad === unidad) : elementos;
-  const visibles = busqueda.trim()
+  const visibles = (busqueda.trim()
     ? buscar(elementosDeUnidad, busqueda, (el) => el.nombre)
-    : elementosDeUnidad.filter((el) => visibleEnLista(el, fecha));
+    : elementosDeUnidad.filter((el) => visibleEnLista(el, fecha))
+  )
+    .slice()
+    .sort(comparadorPorJerarquia(grados));
+  // Elementos dados de baja (de cualquier fecha): salen de las listas y se
+  // ven en su propio apartado.
+  const bajas = elementosDeUnidad.filter((el) => el.fechaBaja);
 
   return (
     <div className="page">
@@ -63,7 +75,12 @@ export default function Asistencia() {
         </button>
       </div>
 
-      {mostrarForm && <FormElemento onCreado={() => setMostrarForm(false)} />}
+      {mostrarForm && (
+        <FormElemento
+          onGuardado={() => setMostrarForm(false)}
+          onCancelar={() => setMostrarForm(false)}
+        />
+      )}
 
       {esAdmin && (
         <div className="campo">
@@ -97,6 +114,33 @@ export default function Asistencia() {
           </div>
           {error && <p className="error">{error}</p>}
 
+          <div className="tabs" role="tablist">
+            {[
+              ["lista", "Lista"],
+              ["fuerza", "Estado de Fuerza"],
+              ["bajas", `Bajas (${bajas.length})`],
+            ].map(([clave, etiqueta]) => (
+              <button
+                key={clave}
+                type="button"
+                role="tab"
+                aria-selected={vista === clave}
+                className={`tab ${vista === clave ? "activo" : ""}`}
+                onClick={() => setVista(clave)}
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+
+          {vista === "fuerza" && (
+            <EstadoFuerza elementos={elementosDeUnidad} grados={grados} unidad={unidad} fecha={fecha} />
+          )}
+
+          {vista === "bajas" && <ListaBajas bajas={bajas} />}
+
+          {vista === "lista" && (
+          <>
           <ul className="lista">
             {visibles.map((el) => {
               const baja = estaDeBaja(el, fecha);
@@ -105,6 +149,7 @@ export default function Asistencia() {
                 <li key={el.id} className="asistencia-row">
                   <span>
                     {el.nombre}
+                    {el.gradoMilitar && <span className="tag">{el.gradoMilitar}</span>}
                     {el.fechaBaja && (
                       <span className="tag tag-baja">Baja {el.fechaBaja}</span>
                     )}
@@ -129,6 +174,8 @@ export default function Asistencia() {
             })}
           </ul>
           {visibles.length === 0 && <p className="nota">No hay elementos.</p>}
+          </>
+          )}
         </>
       )}
     </div>

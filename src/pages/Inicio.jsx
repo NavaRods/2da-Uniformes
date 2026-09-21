@@ -9,11 +9,14 @@ const SECCIONES = [
   ["/uniformidad", "👕", "Uniformidad", "Pedidos, abonos y entregas"],
 ];
 
-const SECCION_ADMIN = ["/usuarios", "🛡️", "Usuarios", "Cuentas, roles y Unidades"];
+const SECCIONES_ADMIN = [
+  ["/usuarios", "🛡️", "Usuarios", "Cuentas y roles"],
+  ["/configuracion", "⚙️", "Configuración", "Unidades, grados y catálogo"],
+];
 
 export default function Inicio() {
   const { perfil } = useAuth();
-  const secciones = perfil?.rol === "admin" ? [...SECCIONES, SECCION_ADMIN] : SECCIONES;
+  const secciones = perfil?.rol === "admin" ? [...SECCIONES, ...SECCIONES_ADMIN] : SECCIONES;
   return (
     <div className="page">
       <h1>Uniformes</h1>

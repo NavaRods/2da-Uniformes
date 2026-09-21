@@ -24,7 +24,7 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../firebase", () => ({ db: {} }));
 
-const { crearElemento, actualizarElemento, listenElementos } = await import(
+const { crearElemento, actualizarElemento, listenElementos, estaActivo } = await import(
   "./elementos"
 );
 
@@ -50,6 +50,44 @@ describe("crearElemento", () => {
     await crearElemento({ nombre: "Ana", telefonos: ["555", "", "666"] });
     const [, datos] = addDoc.mock.calls[0];
     expect(datos.telefonos).toEqual(["555", "666"]);
+  });
+});
+
+describe("crearElemento: campos nuevos", () => {
+  it("guarda grado militar, número de orden y antecedentes", async () => {
+    await crearElemento({
+      nombre: "Juan Pérez",
+      unidad: "2da Unidad",
+      gradoMilitar: "Cadete",
+      numeroOrden: "V0218001",
+      antecedentes: "Sí",
+      antecedentesDetalle: "Cadetes de la Marina",
+      practicaDeporte: "Sí",
+      deporte: "Fútbol",
+    });
+    const [, datos] = addDoc.mock.calls[0];
+    expect(datos).toMatchObject({
+      gradoMilitar: "Cadete",
+      numeroOrden: "V0218001",
+      antecedentes: "Sí",
+      antecedentesDetalle: "Cadetes de la Marina",
+      practicaDeporte: "Sí",
+      deporte: "Fútbol",
+    });
+  });
+
+  it("el número de orden y los antecedentes son opcionales", async () => {
+    await crearElemento({ nombre: "Ana", unidad: "U" });
+    const [, datos] = addDoc.mock.calls[0];
+    expect(datos.numeroOrden).toBe("");
+    expect(datos.antecedentes).toBe("");
+  });
+});
+
+describe("estaActivo", () => {
+  it("un elemento con fechaBaja no está activo", () => {
+    expect(estaActivo({ nombre: "A" })).toBe(true);
+    expect(estaActivo({ nombre: "A", fechaBaja: "2026-09-10" })).toBe(false);
   });
 });
 

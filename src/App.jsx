@@ -11,6 +11,7 @@ import RelacionPagos from "./pages/RelacionPagos";
 import Catalogo from "./pages/Catalogo";
 import Uniformidad from "./pages/Uniformidad";
 import Usuarios from "./pages/Usuarios";
+import Configuracion from "./pages/Configuracion";
 import "./App.css";
 
 function Privado({ children, soloAdmin = false }) {
@@ -138,6 +139,14 @@ function AppRoutes() {
           element={
             <Privado soloAdmin>
               <Usuarios />
+            </Privado>
+          }
+        />
+        <Route
+          path="/configuracion"
+          element={
+            <Privado soloAdmin>
+              <Configuracion />
             </Privado>
           }
         />

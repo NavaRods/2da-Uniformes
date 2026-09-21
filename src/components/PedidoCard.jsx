@@ -21,7 +21,9 @@ function avisar(elemento, mensaje) {
 }
 
 export default function PedidoCard({ cliente: elemento, pedido }) {
-  const { user } = useAuth();
+  const { user, perfil } = useAuth();
+  // Un pedido con pagos solo lo borra un Admin; uno sin pagos, cualquiera.
+  const puedeEliminar = perfil?.rol === "admin" || pedido.saldoPendiente === pedido.precioTotal;
   const quien = user?.displayName || user?.email || "";
   const [abonos, setAbonos] = useState([]);
   const [monto, setMonto] = useState("");
@@ -202,9 +204,11 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
         </button>
       )}
 
-      <button type="button" className="btn-secondary btn-small" onClick={onEliminar}>
-        🗑️ Eliminar pedido
-      </button>
+      {puedeEliminar && (
+        <button type="button" className="btn-secondary btn-small" onClick={onEliminar}>
+          🗑️ Eliminar pedido
+        </button>
+      )}
 
       {abonos.length > 0 && (
         <details>

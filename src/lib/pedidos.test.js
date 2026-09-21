@@ -9,13 +9,29 @@ const updateDoc = vi.fn(async () => {});
 const increment = vi.fn((n) => ({ __op: "increment", value: n }));
 const serverTimestamp = vi.fn(() => "SERVER_TIMESTAMP");
 const collection = vi.fn((...args) => ({ __type: "collection", path: args.slice(1) }));
-const doc = vi.fn((...args) => ({ __type: "doc", path: args.slice(1) }));
+// `id` no es enumerable para que las comparaciones de rutas en los tests
+// sigan viendo solo { __type, path }.
+const conId = (ref, id) => Object.defineProperty(ref, "id", { value: id });
+const doc = vi.fn((...args) =>
+  // doc(collectionRef) sin ID genera uno nuevo, como el SDK real.
+  args.length === 1
+    ? conId({ __type: "doc", path: [...args[0].path, "abono-nuevo"] }, "abono-nuevo")
+    : conId({ __type: "doc", path: args.slice(1) }, args[args.length - 1])
+);
 const query = vi.fn((ref) => ref);
 const orderBy = vi.fn();
 const where = vi.fn();
 const onSnapshot = vi.fn();
 const getDocs = vi.fn(async () => ({ docs: [] }));
-const batch = { delete: vi.fn(), commit: vi.fn(async () => {}) };
+const batch = {
+  delete: vi.fn(),
+  set: vi.fn(),
+  update: vi.fn(),
+  commit: vi.fn(async () => {}),
+};
+// Saldo que "devuelve" Firestore al leer el pedido antes de abonar.
+let saldoEnFirestore = 500;
+const getDoc = vi.fn(async () => ({ data: () => ({ saldoPendiente: saldoEnFirestore }) }));
 const collectionGroup = vi.fn((_db, name) => ({ __type: "collectionGroup", name }));
 
 vi.mock("firebase/firestore", () => ({
@@ -30,6 +46,7 @@ vi.mock("firebase/firestore", () => ({
   serverTimestamp: (...args) => serverTimestamp(...args),
   increment: (...args) => increment(...args),
   where: (...args) => where(...args),
+  getDoc: (...args) => getDoc(...args),
   getDocs: (...args) => getDocs(...args),
   writeBatch: () => batch,
 }));
@@ -107,31 +124,46 @@ describe("marcarCambioPendiente", () => {
 });
 
 describe("registrarAbono", () => {
-  it("crea el abono y descuenta el saldo del pedido con increment negativo", async () => {
+  beforeEach(() => {
+    batch.set.mockClear();
+    batch.update.mockClear();
+    batch.commit.mockClear();
+    saldoEnFirestore = 500;
+  });
+
+  it("guarda el abono y el nuevo saldo en un solo batch, enlazados por ultimoAbonoId", async () => {
     await registrarAbono("el1", "ped1", { monto: "100", quienRecibio: "Carlos" });
 
-    // 1) Se agrega el documento del abono
-    expect(addDoc).toHaveBeenCalledTimes(1);
-    const [, abono] = addDoc.mock.calls[0];
+    // Todo o nada: nada se escribe fuera del batch
+    expect(addDoc).not.toHaveBeenCalled();
+    expect(updateDoc).not.toHaveBeenCalled();
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+
+    const [abonoRef, abono] = batch.set.mock.calls[0];
     expect(abono.monto).toBe(100);
     expect(abono.quienRecibio).toBe("Carlos");
     expect(typeof abono.fechaLocal).toBe("string");
     expect(typeof abono.horaLocal).toBe("string");
 
-    // 2) Se descuenta del saldo del pedido, nunca se "cierra" a mano
-    expect(updateDoc).toHaveBeenCalledTimes(1);
-    const [, cambios] = updateDoc.mock.calls[0];
-    expect(increment).toHaveBeenCalledWith(-100);
-    expect(cambios.saldoPendiente).toEqual({ __op: "increment", value: -100 });
+    // Saldo calculado (500 - 100), no increment(): las reglas exigen el valor exacto
+    const [, cambios] = batch.update.mock.calls[0];
+    expect(cambios.saldoPendiente).toBe(400);
+    expect(cambios.ultimoAbonoId).toBe(abonoRef.id);
   });
 
-  it("varios abonos seguidos siguen descontando del mismo pedido", async () => {
+  it("varios abonos seguidos descuentan del saldo vigente en cada lectura", async () => {
     await registrarAbono("el1", "ped1", { monto: "50", quienRecibio: "A" });
+    saldoEnFirestore = 450;
     await registrarAbono("el1", "ped1", { monto: "75", quienRecibio: "B" });
 
-    expect(addDoc).toHaveBeenCalledTimes(2);
-    expect(increment).toHaveBeenNthCalledWith(1, -50);
-    expect(increment).toHaveBeenNthCalledWith(2, -75);
+    expect(batch.update.mock.calls[0][1].saldoPendiente).toBe(450);
+    expect(batch.update.mock.calls[1][1].saldoPendiente).toBe(375);
+  });
+
+  it("rechaza un monto de 0 o negativo sin escribir nada", async () => {
+    await expect(registrarAbono("el1", "ped1", { monto: "0" })).rejects.toThrow();
+    await expect(registrarAbono("el1", "ped1", { monto: "-20" })).rejects.toThrow();
+    expect(batch.commit).not.toHaveBeenCalled();
   });
 });
 
