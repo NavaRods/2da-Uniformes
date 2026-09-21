@@ -26,15 +26,17 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
   const puedeEliminar = perfil?.rol === "admin" || pedido.saldoPendiente === pedido.precioTotal;
   const quien = user?.displayName || user?.email || "";
   const [abonos, setAbonos] = useState([]);
+  const [verHistorial, setVerHistorial] = useState(false);
   const [monto, setMonto] = useState("");
   const [motivoCambio, setMotivoCambio] = useState("");
   const [mostrarFormCambio, setMostrarFormCambio] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(
-    () => listenAbonosDePedido(elemento.id, pedido.id, setAbonos),
-    [elemento.id, pedido.id]
-  );
+  // Los abonos se leen solo si se abre el historial (antes se leían siempre,
+  // por cada pedido de la lista).
+  useEffect(() => {
+    if (verHistorial) return listenAbonosDePedido(elemento.id, pedido.id, setAbonos);
+  }, [verHistorial, elemento.id, pedido.id]);
 
   // Cada abono se sigue acumulando hasta que el saldo llega a 0: el pedido
   // no se "cierra" a mano, el estado de liquidado sale directo del saldo.
@@ -44,6 +46,9 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
     await registrarAbono(elemento.id, pedido.id, {
       monto,
       quienRecibio: quien,
+      unidad: elemento.unidad,
+      elementoNombre: elemento.nombre,
+      pedido,
     });
 
     const saldoPendiente = pedido.saldoPendiente - Number(monto);
@@ -102,7 +107,8 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
     );
   }
 
-  const totalAbonado = abonos.reduce((suma, a) => suma + Number(a.monto), 0);
+  // Lo abonado = precio - saldo (cada abono descuenta del saldo): no hace falta leer los abonos.
+  const totalAbonado = Math.max((pedido.precioTotal || 0) - (pedido.saldoPendiente || 0), 0);
 
   async function onEliminar() {
     const aviso =
@@ -210,9 +216,9 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
         </button>
       )}
 
-      {abonos.length > 0 && (
-        <details>
-          <summary>Historial de abonos ({abonos.length})</summary>
+      {totalAbonado > 0 && (
+        <details onToggle={(e) => setVerHistorial(e.currentTarget.open)}>
+          <summary>Historial de abonos</summary>
           <ul>
             {abonos.map((a) => (
               <li key={a.id}>

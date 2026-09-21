@@ -6,13 +6,16 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "../firebase";
 import { listenUsuario } from "../lib/usuarios";
+import { reiniciarFuentes } from "../lib/fuentes";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
-  const [perfilCargado, setPerfilCargado] = useState(false);
+  // Correo cuyo perfil ya se resolvió (comparar con el usuario actual evita un
+  // instante de "Sin acceso" al cambiar de cuenta en la misma pestaña).
+  const [perfilDe, setPerfilDe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -23,7 +26,7 @@ export function AuthProvider({ children }) {
       setLoading(false);
       if (!firebaseUser) {
         setPerfil(null);
-        setPerfilCargado(true);
+        reiniciarFuentes();
       }
     });
     return unsub;
@@ -34,16 +37,16 @@ export function AuthProvider({ children }) {
   // acceso a la app (ver Privado en App.jsx).
   useEffect(() => {
     if (!user?.email) return;
-    setPerfilCargado(false);
+    const correo = user.email;
     return listenUsuario(
-      user.email,
+      correo,
       (datos) => {
         setPerfil(datos);
-        setPerfilCargado(true);
+        setPerfilDe(correo);
       },
       () => {
         setPerfil(null);
-        setPerfilCargado(true);
+        setPerfilDe(correo);
       }
     );
   }, [user?.email]);
@@ -68,7 +71,7 @@ export function AuthProvider({ children }) {
         user,
         perfil,
         // Cargando mientras se resuelve Firebase Auth o (si ya hay usuario) su perfil.
-        loading: loading || (!!user && !perfilCargado),
+        loading: loading || (!!user && perfilDe !== user.email),
         error,
         login,
         logout,

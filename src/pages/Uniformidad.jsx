@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { listenElementos } from "../lib/elementos";
-import { listenCatalogo, requiereTalla, TALLA_TIPO } from "../lib/catalogo";
+import { useElementos, useUnidades, useCatalogo } from "../lib/fuentes";
+import { requiereTalla, TALLA_TIPO } from "../lib/catalogo";
 import { crearPedido, registrarAbono } from "../lib/pedidos";
 import { linkWhatsapp } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
 
 export default function Uniformidad() {
   const { user, perfil } = useAuth();
-  const [elementos, setElementos] = useState([]);
-  const [catalogo, setCatalogo] = useState([]);
+  const esAdmin = perfil?.rol === "admin";
+  const [unidad, setUnidad] = useState(esAdmin ? "" : perfil?.unidad || "");
 
   const [elementoSeleccionado, setElementoSeleccionado] = useState(null);
   const [elementoParaConfirmar, setElementoParaConfirmar] = useState(null);
@@ -24,11 +24,10 @@ export default function Uniformidad() {
   const [cerrando, setCerrando] = useState(false);
   const [ventaCerrada, setVentaCerrada] = useState(false);
 
-  useEffect(
-    () => listenElementos(setElementos, perfil?.rol === "admin" ? undefined : perfil?.unidad),
-    [perfil?.rol, perfil?.unidad]
-  );
-  useEffect(() => listenCatalogo(setCatalogo), []);
+  const unidades = useUnidades(esAdmin);
+  // El Admin elige una Unidad antes de cargar sus elementos (no se leen todas).
+  const elementos = useElementos(unidad);
+  const catalogo = useCatalogo();
 
   const producto = catalogo.find((p) => p.id === productoId);
   const faltaTalla = requiereTalla(producto) && !talla.trim();
@@ -109,10 +108,20 @@ export default function Uniformidad() {
         talla: item.talla,
         color: item.color,
         cantidad: 1,
+        unidad: elementoSeleccionado.unidad,
       });
       await registrarAbono(elementoSeleccionado.id, pedidoRef.id, {
         monto: item.monto,
         quienRecibio: user?.displayName || user?.email,
+        unidad: elementoSeleccionado.unidad,
+        elementoNombre: elementoSeleccionado.nombre,
+        pedido: {
+          articulo: item.articulo,
+          productoNombre: item.productoNombre,
+          talla: item.talla,
+          color: item.color,
+          saldoPendiente: item.precioTotal,
+        },
       });
     }
 
@@ -144,6 +153,16 @@ export default function Uniformidad() {
       {!elementoSeleccionado && (
         <div className="card">
           <h2>Selecciona un elemento</h2>
+          {esAdmin && (
+            <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
+              <option value="">Selecciona una Unidad...</option>
+              {unidades.map((u) => (
+                <option key={u.id} value={u.nombre}>
+                  {u.nombre}
+                </option>
+              ))}
+            </select>
+          )}
           <select value="" onChange={(e) => elegirElemento(e.target.value)}>
             <option value="">Buscar elemento...</option>
             {elementos.map((el) => (
@@ -308,9 +327,11 @@ export default function Uniformidad() {
       )}
 
       <p style={{ marginTop: 24 }}>
-        <Link to="/catalogo" className="volver">
-          Administrar catálogo de productos →
-        </Link>
+        {esAdmin && (
+          <Link to="/catalogo" className="volver">
+            Administrar catálogo de productos →
+          </Link>
+        )}
       </p>
     </div>
   );

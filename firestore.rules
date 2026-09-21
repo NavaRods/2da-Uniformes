@@ -53,8 +53,14 @@ service cloud.firestore {
 
     match /usuarios/{email} {
       allow read: if esAdmin() || (request.auth != null && request.auth.token.email.lower() == email);
-      allow create, update: if esAdmin() && usuarioValido(request.resource.data);
-      allow delete: if esAdmin();
+      allow create: if esAdmin() && usuarioValido(request.resource.data);
+      // Un Admin no puede quitarse a sí mismo el acceso ni el rol (ni
+      // borrarse): así la app nunca se queda sin Admin. Otro Admin sí puede.
+      allow update: if esAdmin() && usuarioValido(request.resource.data) &&
+        (request.auth.token.email.lower() != email ||
+          (request.resource.data.rol == "admin" &&
+           request.resource.data.get("activo", true) == true));
+      allow delete: if esAdmin() && request.auth.token.email.lower() != email;
     }
 
     // --- Unidades (lista abierta, la administra un Admin) ---
@@ -125,13 +131,17 @@ service cloud.firestore {
       allow delete: if esAdmin();
 
       // --- Pedidos de un elemento ---
-      function pedidoValido(datos) {
+      // "unidad" copia la Unidad del elemento en cada pedido, abono y cuota:
+      // las consultas que juntan datos de varios elementos (Relación de pagos)
+      // no pueden consultar al elemento dueño, así que filtran por este campo.
+      function pedidoValido(datos, unidadElemento) {
         return datos.keys().hasOnly([
           "articulo", "productoNombre", "talla", "color", "cantidad",
           "precioTotal", "saldoPendiente", "entregado", "quienEntrego",
           "fechaEntrega", "cambioPendiente", "motivoCambio",
-          "fechaCambioSolicitado", "ultimoAbonoId", "creadoEn"
+          "fechaCambioSolicitado", "ultimoAbonoId", "creadoEn", "unidad"
         ]) &&
+        (!("unidad" in datos) || datos.unidad == unidadElemento) &&
         datos.articulo is string &&
         datos.precioTotal is number &&
         datos.saldoPendiente is number &&
@@ -159,16 +169,17 @@ service cloud.firestore {
         return despues.diff(antes).affectedKeys().hasOnly([
           "entregado", "quienEntrego", "fechaEntrega",
           "cambioPendiente", "motivoCambio", "fechaCambioSolicitado",
-          "saldoPendiente", "ultimoAbonoId"
+          "saldoPendiente", "ultimoAbonoId", "unidad"
         ]);
       }
 
       // --- Cuotas (mensualidades pagadas) de un elemento ---
-      function cuotaValida(datos) {
+      function cuotaValida(datos, unidadElemento) {
         return datos.keys().hasOnly([
           "tipo", "meses", "montoPorMes", "total", "quienRecibio",
-          "fecha", "fechaLocal", "horaLocal"
+          "fecha", "fechaLocal", "horaLocal", "unidad", "elementoNombre"
         ]) &&
+        datos.unidad == unidadElemento &&
         datos.tipo == "mensualidad" &&
         datos.meses is list && datos.meses.size() > 0 &&
         datos.montoPorMes is number && datos.montoPorMes > 0 &&
@@ -178,10 +189,15 @@ service cloud.firestore {
 
       match /cuotas/{cuotaId} {
         allow read: if enMiUnidad(unidadDelElemento(elementoId));
-        allow create: if cuotaValida(request.resource.data) && enMiUnidad(unidadDelElemento(elementoId));
+        allow create: if cuotaValida(request.resource.data, unidadDelElemento(elementoId)) &&
+          enMiUnidad(unidadDelElemento(elementoId));
         // Un pago mal registrado no se edita. Solo un Admin puede borrarlo
-        // (rastro de auditoría) y luego se vuelve a capturar.
-        allow update: if false;
+        // (rastro de auditoría) y luego se vuelve a capturar. Única excepción
+        // de edición: un Admin puede agregar el campo "unidad" a cuotas
+        // anteriores (migración de datos).
+        allow update: if esAdmin() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["unidad"]) &&
+          request.resource.data.unidad == unidadDelElemento(elementoId);
         allow delete: if esAdmin();
       }
 
@@ -189,13 +205,14 @@ service cloud.firestore {
         allow read: if enMiUnidad(unidadDelElemento(elementoId));
 
         // Un pedido nace sin pagos: el saldo es el precio completo.
-        allow create: if pedidoValido(request.resource.data) &&
+        allow create: if pedidoValido(request.resource.data, unidadDelElemento(elementoId)) &&
+          "unidad" in request.resource.data &&
           enMiUnidad(unidadDelElemento(elementoId)) &&
           request.resource.data.precioTotal >= 0 &&
           request.resource.data.saldoPendiente == request.resource.data.precioTotal &&
           !("ultimoAbonoId" in request.resource.data);
 
-        allow update: if pedidoValido(request.resource.data) &&
+        allow update: if pedidoValido(request.resource.data, unidadDelElemento(elementoId)) &&
           enMiUnidad(unidadDelElemento(elementoId)) &&
           pedidoSoloCambiaPermitido(resource.data, request.resource.data) &&
           (request.resource.data.saldoPendiente == resource.data.saldoPendiente ||
@@ -208,8 +225,13 @@ service cloud.firestore {
           (esAdmin() || resource.data.saldoPendiente == resource.data.precioTotal);
 
         // --- Abonos de un pedido ---
-        function abonoValido(datos) {
-          return datos.keys().hasOnly(["monto", "quienRecibio", "fecha", "fechaLocal", "horaLocal"]) &&
+        function abonoValido(datos, unidadElemento) {
+          return datos.keys().hasOnly([
+            "monto", "quienRecibio", "fecha", "fechaLocal", "horaLocal", "unidad",
+            // Copias del elemento y pedido para la Relación de pagos.
+            "elementoNombre", "articulo", "productoNombre", "talla", "color", "saldoTras"
+          ]) &&
+          datos.unidad == unidadElemento &&
           datos.monto is number && datos.monto > 0 &&
           datos.fechaLocal is string;
         }
@@ -219,15 +241,18 @@ service cloud.firestore {
 
           // Un abono solo se crea junto con el descuento exacto en el saldo
           // del pedido (ver saldoBajaPorAbono).
-          allow create: if abonoValido(request.resource.data) &&
+          allow create: if abonoValido(request.resource.data, unidadDelElemento(elementoId)) &&
             enMiUnidad(unidadDelElemento(elementoId)) &&
             getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.get("ultimoAbonoId", "") == abonoId &&
             getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente ==
               get(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente - request.resource.data.monto;
 
-          // Los abonos no se editan, y solo un Admin los borra (al eliminar un
-          // pedido que ya tenía pagos).
-          allow update: if false;
+          // Los abonos no se editan y solo un Admin los borra (al eliminar un
+          // pedido que ya tenía pagos). Única excepción de edición: un Admin
+          // puede agregar el campo "unidad" a abonos anteriores (migración).
+          allow update: if esAdmin() &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["unidad"]) &&
+            request.resource.data.unidad == unidadDelElemento(elementoId);
           allow delete: if esAdmin();
         }
       }
@@ -270,36 +295,45 @@ service cloud.firestore {
       allow write: if enMiUnidad(unidad) && asistenciaValida(request.resource.data, unidad);
     }
 
+    // Formato anterior (un doc plano por día con todos los elementos). Ya no
+    // se escribe; un Admin solo puede leerlo y borrarlo para migrarlo.
+    match /asistencias/{fecha} {
+      allow read, delete: if esAdmin();
+    }
+
     // --- Configuración de la app ---
     // Ajustes compartidos (hoy, solo el número de WhatsApp que recibe la
     // Relación de pagos). Un número con código de país: 11 a 15 dígitos.
-    // Solo un Admin lo cambia.
+    // Lo puede cambiar cualquier usuario con acceso (Admin u Operador).
     match /configuracion/{ajusteId} {
       allow read: if esUsuarioAutorizado();
-      allow create, update: if esAdmin() &&
+      allow create, update: if esUsuarioAutorizado() &&
         request.resource.data.keys().hasOnly(["whatsappNumero"]) &&
         request.resource.data.whatsappNumero is string &&
         request.resource.data.whatsappNumero.matches('^[0-9]{11,15}$');
     }
 
     // --- Consultas de grupo de colección ---
-    // La Relación de pagos lee los abonos y las mensualidades de todos los
-    // elementos de una Unidad a la vez, y los cambios pendientes de todos los
-    // pedidos. Firestore exige una regla con comodín recursivo para esas
-    // consultas; las reglas anidadas de arriba solo cubren lecturas dentro de
-    // un elemento ya conocido. `path` aquí es el prefijo de ruta antes de la
-    // subcolección (p.ej. "elementos/ELID" o "elementos/ELID/pedidos/PEDID"),
-    // así que `path[1]` siempre es el ID del elemento dueño.
+    // La Relación de pagos y el reporte de asistencia leen documentos de
+    // muchos elementos a la vez. Firestore exige una regla con comodín
+    // recursivo para esas consultas, y la regla solo puede apoyarse en campos
+    // del propio documento (no en otro documento ni en la ruta, que la
+    // consulta no fija). Por eso pedidos, abonos y cuotas guardan "unidad", y
+    // el Operador siempre consulta con `where("unidad", "==", su unidad)`.
     match /{path=**}/abonos/{abonoId} {
-      allow read: if enMiUnidad(unidadDelElemento(path[1]));
+      allow read: if enMiUnidad(resource.data.unidad);
     }
 
     match /{path=**}/cuotas/{cuotaId} {
-      allow read: if enMiUnidad(unidadDelElemento(path[1]));
+      allow read: if enMiUnidad(resource.data.unidad);
     }
 
     match /{path=**}/pedidos/{pedidoId} {
-      allow read: if enMiUnidad(unidadDelElemento(path[1]));
+      allow read: if enMiUnidad(resource.data.unidad);
+    }
+
+    match /{path=**}/porUnidad/{unidadId} {
+      allow read: if enMiUnidad(resource.data.unidad);
     }
 
     // Cualquier otra ruta no contemplada arriba queda bloqueada por

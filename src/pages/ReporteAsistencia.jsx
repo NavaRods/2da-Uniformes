@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
-import { listenElementos } from "../lib/elementos";
-import { listenUnidades } from "../lib/unidades";
-import { useGrados } from "../lib/gradosDb";
+import { useState } from "react";
+import { useElementos, useUnidades, useGrados } from "../lib/fuentes";
 import { useAuth } from "../auth/AuthContext";
 import { domingosDelMes, fechaLocal, obtenerAsistenciasDias } from "../lib/asistencia";
 import {
@@ -21,22 +19,16 @@ export default function ReporteAsistencia() {
   const { perfil } = useAuth();
   const esAdmin = perfil?.rol === "admin";
   const grados = useGrados();
-  const [unidades, setUnidades] = useState([]);
   const [unidad, setUnidad] = useState(esAdmin ? "" : perfil?.unidad || "");
-  const [elementos, setElementos] = useState([]);
   const [mes, setMes] = useState(mesActual());
   const [reporte, setReporte] = useState(null); // { unidad, mes, domingos, filas }
   const [cargando, setCargando] = useState(false);
   const [generandoPdf, setGenerandoPdf] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (esAdmin) return listenUnidades(setUnidades);
-  }, [esAdmin]);
-  useEffect(
-    () => listenElementos(setElementos, esAdmin ? unidad || undefined : unidad),
-    [esAdmin, unidad]
-  );
+  const unidades = useUnidades(esAdmin);
+  // Sin Unidad elegida (Admin) no se carga nada: antes leía todos los elementos.
+  const elementos = useElementos(unidad);
 
   async function generar() {
     if (!unidad || !mes) return;

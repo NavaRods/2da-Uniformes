@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import {
   collection,
   addDoc,
@@ -13,25 +12,18 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { GRADOS_PREDETERMINADOS, ordenarGrados } from "./grados";
+import { GRADOS_PREDETERMINADOS } from "./grados";
+import { vigilar } from "./estadoFirestore";
 
 const gradosRef = collection(db, "grados");
 
 // `callback` recibe la lista de la colección (vacía si aún no se ha cargado
-// ninguno). Usa useGrados() en los componentes para tener el respaldo de los
-// grados predeterminados.
+// ninguno). En los componentes usa useGrados() de lib/fuentes.js, que comparte
+// un solo listener y añade el respaldo de los grados predeterminados.
 export function listenGrados(callback) {
   return onSnapshot(gradosRef, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
-}
-
-// Lista de grados lista para usar: los de Firestore o, si no hay, los
-// predeterminados. Ordenada de mayor a menor jerarquía.
-export function useGrados() {
-  const [grados, setGrados] = useState([]);
-  useEffect(() => listenGrados(setGrados), []);
-  return ordenarGrados(grados.length > 0 ? grados : GRADOS_PREDETERMINADOS);
+  }, vigilar());
 }
 
 export async function sembrarGradosPredeterminados() {

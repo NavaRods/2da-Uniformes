@@ -1129,4 +1129,37 @@ th {
 
 .estado-fuerza tfoot th {
   border-top: 2px solid currentColor;
+
+/* Avisos de conexión y de cuota de Firebase (bajo la barra de navegación). */
+.estado-avisos {
+  position: sticky;
+  top: 58px;
+  z-index: 9;
+}
+
+.aviso-estado {
+  margin: 0;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.aviso-sin-conexion {
+  background: var(--primary-soft);
+  color: var(--text);
+}
+
+.aviso-sincronizando {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.aviso-cuota {
+  background: var(--danger-soft);
+  color: var(--danger);
 }

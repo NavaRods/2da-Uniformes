@@ -1,25 +1,28 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { listenElementos, estaActivo } from "../lib/elementos";
+import { useElementos, useUnidades } from "../lib/fuentes";
+import { estaActivo } from "../lib/elementos";
 import { useAuth } from "../auth/AuthContext";
 import FormElemento from "../components/FormElemento";
 import ListaBajas from "../components/ListaBajas";
 
 export default function Elementos() {
   const { perfil } = useAuth();
-  const [elementos, setElementos] = useState([]);
+  const esAdmin = perfil?.rol === "admin";
+  const [unidad, setUnidad] = useState(esAdmin ? "" : perfil?.unidad || "");
   const [busqueda, setBusqueda] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
   const [vista, setVista] = useState("activos"); // activos | bajas
 
-  useEffect(
-    () => listenElementos(setElementos, perfil?.rol === "admin" ? undefined : perfil?.unidad),
-    [perfil?.rol, perfil?.unidad]
-  );
+  const unidades = useUnidades(esAdmin);
+  // El Admin elige una Unidad antes de cargar su lista: así no se leen todos
+  // los elementos de todas las Unidades cada vez que se abre la pantalla.
+  const elementos = useElementos(unidad);
 
   const coincide = (el) => el.nombre.toLowerCase().includes(busqueda.toLowerCase());
   const activos = elementos.filter(estaActivo).filter(coincide);
   const bajas = elementos.filter((el) => !estaActivo(el)).filter(coincide);
+  const totalBajas = elementos.filter((el) => !estaActivo(el)).length;
 
   return (
     <div className="page">
@@ -37,10 +40,24 @@ export default function Elementos() {
         />
       )}
 
+      {esAdmin && (
+        <div className="campo">
+          <label>Unidad</label>
+          <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
+            <option value="">Selecciona una Unidad...</option>
+            {unidades.map((u) => (
+              <option key={u.id} value={u.nombre}>
+                {u.nombre}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div className="tabs" role="tablist">
         {[
           ["activos", "Activos"],
-          ["bajas", `Bajas (${elementos.filter((el) => !estaActivo(el)).length})`],
+          ["bajas", `Bajas (${totalBajas})`],
         ].map(([clave, etiqueta]) => (
           <button
             key={clave}
@@ -66,7 +83,7 @@ export default function Elementos() {
         <ul className="lista">
           {activos.map((el) => (
             <li key={el.id}>
-              <Link to={`/elementos/${el.id}`} className="fila-lista">
+              <Link to={`/elementos/${el.id}`} state={{ unidad: el.unidad }} className="fila-lista">
                 <span>{el.nombre}</span>
                 <span className="etiquetas">
                   {el.gradoMilitar && <span className="tag">{el.gradoMilitar}</span>}
@@ -77,7 +94,13 @@ export default function Elementos() {
               </Link>
             </li>
           ))}
-          {activos.length === 0 && <p>Sin elementos todavía.</p>}
+          {activos.length === 0 && (
+            <p>
+              {esAdmin && !unidad
+                ? "Selecciona una Unidad para ver sus elementos."
+                : "Sin elementos todavía."}
+            </p>
+          )}
         </ul>
       )}
 

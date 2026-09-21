@@ -6,6 +6,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { vigilar, vigilarEscritura } from "./estadoFirestore";
 
 // Un doc por día y Unidad: asistencias/{fecha}/porUnidad/{unidad}, con
 // { unidad, fecha, estados: { elementoId: estado, ... } }. Separado así (en
@@ -22,7 +23,7 @@ export function listenAsistenciaDia(fecha, unidad, callback) {
   }
   return onSnapshot(diaUnidadRef(fecha, unidad), (snap) => {
     callback(snap.exists() ? snap.data().estados || {} : {});
-  });
+  }, vigilar());
 }
 
 export const ESTADOS = [
@@ -56,7 +57,12 @@ export function visibleEnLista(elemento, fecha) {
   return !elemento.fechaBaja || elemento.fechaBaja >= fecha;
 }
 
+// Meses cerrados ya consultados en esta sesión: no cambian salvo que alguien
+// edite un día pasado desde esta pestaña, y en ese caso se descartan.
+const mesesCerrados = new Map();
+
 export async function marcarAsistencia(fecha, elemento, estado) {
+  mesesCerrados.delete(`${elemento.unidad}|${fecha.slice(0, 7)}`);
   const batch = writeBatch(db);
   batch.set(
     diaUnidadRef(fecha, elemento.unidad),
@@ -69,7 +75,7 @@ export async function marcarAsistencia(fecha, elemento, estado) {
     // Se marcó otro estado en/después de la baja: se reactiva al elemento.
     batch.update(doc(db, "elementos", elemento.id), { fechaBaja: deleteField() });
   }
-  await batch.commit();
+  await vigilarEscritura(batch.commit());
 }
 
 // Da de baja a un elemento: queda con estado "baja" ese día y sale de las
@@ -81,6 +87,7 @@ export async function darDeBaja(elemento, fecha = fechaLocal()) {
 // Reactiva a un elemento dado de baja: quita su fechaBaja y el estado "baja"
 // que quedó marcado ese día.
 export async function reactivarElemento(elemento) {
+  mesesCerrados.delete(`${elemento.unidad}|${(elemento.fechaBaja || "").slice(0, 7)}`);
   const batch = writeBatch(db);
   batch.update(doc(db, "elementos", elemento.id), { fechaBaja: deleteField() });
   if (elemento.fechaBaja) {
@@ -114,10 +121,17 @@ export function domingosDelMes(yyyyMm) {
 // el permiso de lectura de cada día de la Unidad.
 export async function obtenerAsistenciasDias(fechas, unidad) {
   if (!unidad) return {};
+  // Los meses ya cerrados no cambian: se guardan en memoria para no volver a leerlos.
+  const mes = fechas[0]?.slice(0, 7);
+  if (!mes) return {};
+  const clave = `${unidad}|${mes}`;
+  const cerrado = mes < fechaLocal().slice(0, 7);
+  if (cerrado && mesesCerrados.has(clave)) return mesesCerrados.get(clave);
   const snaps = await Promise.all(fechas.map((f) => getDoc(diaUnidadRef(f, unidad))));
   const resultado = {};
   snaps.forEach((snap, i) => {
     resultado[fechas[i]] = snap.exists() ? snap.data().estados || {} : {};
   });
+  if (cerrado) mesesCerrados.set(clave, resultado);
   return resultado;
 }

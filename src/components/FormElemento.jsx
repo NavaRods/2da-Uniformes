@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { crearElemento, actualizarElemento } from "../lib/elementos";
-import { listenUnidades } from "../lib/unidades";
-import { useGrados } from "../lib/gradosDb";
+import { useUnidades, useGrados } from "../lib/fuentes";
 import { useAuth } from "../auth/AuthContext";
 import { TURNOS, FUENTES } from "../lib/opciones";
 import { fechaLocalISO } from "../lib/format";
@@ -45,13 +44,12 @@ export default function FormElemento({ elemento, onGuardado, onCancelar }) {
   const esAdmin = perfil?.rol === "admin";
   const modo = elemento ? "editar" : "crear";
   const grados = useGrados();
-  const [unidades, setUnidades] = useState([]);
   const [form, setForm] = useState(() => formInicial(elemento, esAdmin, perfil));
   const [intentado, setIntentado] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => listenUnidades(setUnidades), []);
+  const unidades = useUnidades();
 
   const errores = validarElemento(
     form,

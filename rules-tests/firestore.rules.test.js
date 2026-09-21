@@ -28,6 +28,7 @@ const como = (correo) =>
 
 const elementoA = { unidad: "A", grupo: "Varonil", nombre: "Luis" };
 const pedidoBase = {
+  unidad: "A",
   articulo: "Pantalón — talla 10",
   productoNombre: "Pantalón",
   talla: "10",
@@ -86,7 +87,12 @@ const abonoRef = (db, id, pedido = "ped1") =>
 // Abono + nuevo saldo en un solo batch, como hace registrarAbono en la app.
 async function abonar(db, { monto, saldoNuevo, id = "ab1", pedido = "ped1" }) {
   const batch = writeBatch(db);
-  batch.set(abonoRef(db, id, pedido), { monto, quienRecibio: "Ana", fechaLocal: "2026-09-02" });
+  batch.set(abonoRef(db, id, pedido), {
+    unidad: "A",
+    monto,
+    quienRecibio: "Ana",
+    fechaLocal: "2026-09-02",
+  });
   batch.update(pedidoRef(db, pedido), { saldoPendiente: saldoNuevo, ultimoAbonoId: id });
   return batch.commit();
 }
@@ -129,7 +135,7 @@ describe("abonos: el dinero no se puede manipular", () => {
   });
 
   it("un abono sin tocar el saldo se rechaza", async () => {
-    await assertFails(setDoc(abonoRef(como(OP_A), "ab1"), { monto: 50, fechaLocal: "2026-09-02" }));
+    await assertFails(setDoc(abonoRef(como(OP_A), "ab1"), { unidad: "A", monto: 50, fechaLocal: "2026-09-02" }));
   });
 
   it("un abono cuyo descuento no coincide con el monto se rechaza", async () => {
@@ -231,6 +237,7 @@ describe("mensualidades", () => {
   const cuota = (db, datos) =>
     setDoc(doc(collection(db, "elementos", "el1", "cuotas")), {
       tipo: "mensualidad",
+      unidad: "A",
       meses: ["2026-10", "2026-11"],
       montoPorMes: 60,
       total: 120,

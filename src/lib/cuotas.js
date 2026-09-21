@@ -11,6 +11,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { vigilar, vigilarEscritura } from "./estadoFirestore";
 import { fechaLocal } from "./asistencia";
 import { horaLocalHHMM } from "./format";
 
@@ -68,13 +69,14 @@ export function listenCuotas(elementoId, callback) {
   const q = query(collection(db, "elementos", elementoId, "cuotas"), orderBy("fecha", "desc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  }, vigilar());
 }
 
 // Todas las mensualidades cobradas en un día (de cualquier elemento), para la
 // Relación de pagos.
-export function listenCuotasDelDia(fecha, callback, onError) {
-  const q = query(collectionGroup(db, "cuotas"), where("fechaLocal", "==", fecha));
+export function listenCuotasDelDia(fecha, callback, onError, unidad) {
+  const filtros = unidad ? [where("unidad", "==", unidad)] : [];
+  const q = query(collectionGroup(db, "cuotas"), ...filtros, where("fechaLocal", "==", fecha));
   return onSnapshot(q, (snap) => {
     callback(
       snap.docs.map((d) => ({
@@ -83,13 +85,19 @@ export function listenCuotasDelDia(fecha, callback, onError) {
         ...d.data(),
       }))
     );
-  }, onError);
+  }, vigilar(onError));
 }
 
-export async function registrarMensualidad(elementoId, { meses, montoPorMes, quienRecibio }) {
+export async function registrarMensualidad(
+  elementoId,
+  { meses, montoPorMes, quienRecibio, unidad, elementoNombre }
+) {
   const ordenados = [...meses].sort();
   const monto = Number(montoPorMes);
-  return addDoc(collection(db, "elementos", elementoId, "cuotas"), {
+  return vigilarEscritura(addDoc(collection(db, "elementos", elementoId, "cuotas"), {
+    unidad,
+    // Copia del nombre para que la Relación de pagos no lea al elemento.
+    ...(elementoNombre ? { elementoNombre } : {}),
     tipo: "mensualidad",
     meses: ordenados,
     montoPorMes: monto,
@@ -98,7 +106,7 @@ export async function registrarMensualidad(elementoId, { meses, montoPorMes, qui
     fecha: serverTimestamp(),
     fechaLocal: fechaLocal(),
     horaLocal: horaLocalHHMM(),
-  });
+  }));
 }
 
 export async function eliminarCuota(elementoId, cuotaId) {

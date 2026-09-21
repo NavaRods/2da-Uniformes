@@ -128,19 +128,23 @@ describe("registrarAbono", () => {
     batch.set.mockClear();
     batch.update.mockClear();
     batch.commit.mockClear();
+    getDoc.mockClear();
     saldoEnFirestore = 500;
   });
 
   it("guarda el abono y el nuevo saldo en un solo batch, enlazados por ultimoAbonoId", async () => {
-    await registrarAbono("el1", "ped1", { monto: "100", quienRecibio: "Carlos" });
+    await registrarAbono("el1", "ped1", { monto: "100", quienRecibio: "Carlos", unidad: "2a" });
 
     // Todo o nada: nada se escribe fuera del batch
     expect(addDoc).not.toHaveBeenCalled();
     expect(updateDoc).not.toHaveBeenCalled();
+    expect(batch.set).toHaveBeenCalledTimes(1);
+    expect(batch.update).toHaveBeenCalledTimes(1);
     expect(batch.commit).toHaveBeenCalledTimes(1);
 
     const [abonoRef, abono] = batch.set.mock.calls[0];
     expect(abono.monto).toBe(100);
+    expect(abono.unidad).toBe("2a");
     expect(abono.quienRecibio).toBe("Carlos");
     expect(typeof abono.fechaLocal).toBe("string");
     expect(typeof abono.horaLocal).toBe("string");
@@ -151,11 +155,45 @@ describe("registrarAbono", () => {
     expect(cambios.ultimoAbonoId).toBe(abonoRef.id);
   });
 
+  it("usa el saldo que ya conoce quien llama, sin volver a leer el pedido", async () => {
+    await registrarAbono("el1", "ped1", {
+      monto: 100,
+      pedido: { articulo: "Playera", saldoPendiente: 250 },
+    });
+    expect(getDoc).not.toHaveBeenCalled();
+    expect(batch.update.mock.calls[0][1].saldoPendiente).toBe(150);
+  });
+
+  it("copia el nombre del elemento y los datos del pedido al abono", async () => {
+    await registrarAbono("el1", "ped1", {
+      monto: 100,
+      elementoNombre: "Ana",
+      pedido: { articulo: "Playera — Negra", productoNombre: "Playera", talla: "M", color: "Negra", saldoPendiente: 250 },
+    });
+    const [, abono] = batch.set.mock.calls[0];
+    expect(abono).toMatchObject({
+      elementoNombre: "Ana",
+      articulo: "Playera — Negra",
+      productoNombre: "Playera",
+      talla: "M",
+      color: "Negra",
+      saldoTras: 150,
+    });
+  });
+
+  it("sin datos para copiar no agrega campos extra", async () => {
+    await registrarAbono("el1", "ped1", { monto: 10 });
+    const [, abono] = batch.set.mock.calls[0];
+    expect(abono).not.toHaveProperty("articulo");
+    expect(abono).not.toHaveProperty("elementoNombre");
+  });
+
   it("varios abonos seguidos descuentan del saldo vigente en cada lectura", async () => {
     await registrarAbono("el1", "ped1", { monto: "50", quienRecibio: "A" });
     saldoEnFirestore = 450;
     await registrarAbono("el1", "ped1", { monto: "75", quienRecibio: "B" });
 
+    expect(batch.set).toHaveBeenCalledTimes(2);
     expect(batch.update.mock.calls[0][1].saldoPendiente).toBe(450);
     expect(batch.update.mock.calls[1][1].saldoPendiente).toBe(375);
   });

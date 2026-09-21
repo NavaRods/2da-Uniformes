@@ -1,5 +1,6 @@
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { vigilar } from "./estadoFirestore";
 
 // Ajustes compartidos por todos los usuarios de la app (un solo documento).
 const configRef = () => doc(db, "configuracion", "general");
@@ -8,7 +9,7 @@ export function listenConfiguracion(callback, onError) {
   return onSnapshot(
     configRef(),
     (snap) => callback(snap.exists() ? snap.data() : {}),
-    onError
+    vigilar(onError)
   );
 }
 
