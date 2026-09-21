@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useLocation, Link } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { actualizarElemento } from "../lib/elementos";
@@ -8,7 +8,9 @@ import {
   crearPedido,
   registrarAbono,
 } from "../lib/pedidos";
-import { listenCatalogo, requiereTalla, TALLA_TIPO } from "../lib/catalogo";
+import { requiereTalla, TALLA_TIPO } from "../lib/catalogo";
+import { useElementos, useCatalogo } from "../lib/fuentes";
+import { vigilar } from "../lib/estadoFirestore";
 import { TURNOS, FUENTES, GRUPOS_ELEMENTO } from "../lib/opciones";
 import { useAuth } from "../auth/AuthContext";
 import CuotaMensualidad from "../components/CuotaMensualidad";
@@ -17,10 +19,11 @@ import PedidoCard from "../components/PedidoCard";
 
 export default function ElementoPerfil() {
   const { elementoId } = useParams();
-  const { user } = useAuth();
-  const [elemento, setElemento] = useState(null);
+  const { user, perfil } = useAuth();
+  const { state } = useLocation();
+  const [directo, setDirecto] = useState(null);
   const [pedidos, setPedidos] = useState([]);
-  const [catalogo, setCatalogo] = useState([]);
+  const catalogo = useCatalogo();
   const [productoId, setProductoId] = useState("");
   const [talla, setTalla] = useState("");
   const [color, setColor] = useState("");
@@ -35,15 +38,24 @@ export default function ElementoPerfil() {
   const [formEdicion, setFormEdicion] = useState(null);
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
 
+  // El elemento sale de la lista ya cargada de su Unidad (0 lecturas). Solo si
+  // no está ahí (enlace directo, o Admin sin saber la Unidad) se lee su documento.
+  const unidadDeLista = state?.unidad || (perfil?.rol === "admin" ? "" : perfil?.unidad || "");
+  const enLista = useElementos(unidadDeLista).find((e) => e.id === elementoId) || null;
+  const buscarDirecto = !enLista;
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "elementos", elementoId), (snap) => {
-      setElemento(snap.exists() ? { id: snap.id, ...snap.data() } : null);
-    });
-    return unsub;
-  }, [elementoId]);
+    if (!buscarDirecto) return;
+    return onSnapshot(
+      doc(db, "elementos", elementoId),
+      (snap) => {
+        setDirecto(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+      },
+      vigilar()
+    );
+  }, [elementoId, buscarDirecto]);
+  const elemento = enLista ?? (directo?.id === elementoId ? directo : null);
 
   useEffect(() => listenPedidosDeElemento(elementoId, setPedidos), [elementoId]);
-  useEffect(() => listenCatalogo(setCatalogo), []);
   useEffect(() => listenCuotas(elementoId, setCuotas), [elementoId]);
 
   const producto = catalogo.find((p) => p.id === productoId);
@@ -95,6 +107,14 @@ export default function ElementoPerfil() {
         monto: pagoInicial,
         quienRecibio: user?.displayName || user?.email,
         unidad: elemento.unidad,
+        elementoNombre: elemento.nombre,
+        pedido: {
+          articulo: partes.join(" — "),
+          productoNombre: producto.nombre,
+          talla,
+          color,
+          saldoPendiente: precioTotal,
+        },
       });
     } catch {
       setErrorPedido("No se pudo guardar el pedido. Verifica tu conexión e inténtalo de nuevo.");

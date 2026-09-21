@@ -12,6 +12,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { vigilar } from "./estadoFirestore";
 
 const catalogoRef = collection(db, "catalogo");
 
@@ -69,7 +70,7 @@ export function listenCatalogo(callback) {
   const q = query(catalogoRef, orderBy("nombre"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  }, vigilar());
 }
 
 export async function sembrarCatalogoInicial() {

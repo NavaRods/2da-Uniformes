@@ -9,6 +9,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { vigilar, vigilarEscritura } from "./estadoFirestore";
 
 // Un doc por día y Unidad: asistencias/{fecha}/porUnidad/{unidad}, con
 // { unidad, fecha, estados: { elementoId: estado, ... } }. Separado así (en
@@ -25,7 +26,7 @@ export function listenAsistenciaDia(fecha, unidad, callback) {
   }
   return onSnapshot(diaUnidadRef(fecha, unidad), (snap) => {
     callback(snap.exists() ? snap.data().estados || {} : {});
-  });
+  }, vigilar());
 }
 
 export const ESTADOS = [
@@ -59,7 +60,12 @@ export function visibleEnLista(elemento, fecha) {
   return !elemento.fechaBaja || elemento.fechaBaja >= fecha;
 }
 
+// Meses cerrados ya consultados en esta sesión: no cambian salvo que alguien
+// edite un día pasado desde esta pestaña, y en ese caso se descartan.
+const mesesCerrados = new Map();
+
 export async function marcarAsistencia(fecha, elemento, estado) {
+  mesesCerrados.delete(`${elemento.unidad}|${fecha.slice(0, 7)}`);
   const batch = writeBatch(db);
   batch.set(
     diaUnidadRef(fecha, elemento.unidad),
@@ -72,13 +78,16 @@ export async function marcarAsistencia(fecha, elemento, estado) {
     // Se marcó otro estado en/después de la baja: se reactiva al elemento.
     batch.update(doc(db, "elementos", elemento.id), { fechaBaja: deleteField() });
   }
-  await batch.commit();
+  await vigilarEscritura(batch.commit());
 }
 
 // Lista de asistencia de un mes completo (yyyy-mm) de una Unidad, generada a
 // demanda. Devuelve { "2026-08-01": { elementoId: estado, ... }, ... }
 export async function obtenerAsistenciasMes(yyyyMm, unidad) {
   if (!unidad) return {};
+  const clave = `${unidad}|${yyyyMm}`;
+  const cerrado = yyyyMm < fechaLocal().slice(0, 7);
+  if (cerrado && mesesCerrados.has(clave)) return mesesCerrados.get(clave);
   const ref = collectionGroup(db, "porUnidad");
   const q = query(
     ref,
@@ -91,5 +100,6 @@ export async function obtenerAsistenciasMes(yyyyMm, unidad) {
   snap.forEach((d) => {
     resultado[d.data().fecha] = d.data().estados || {};
   });
+  if (cerrado) mesesCerrados.set(clave, resultado);
   return resultado;
 }

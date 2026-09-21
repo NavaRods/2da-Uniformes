@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { listenElementos } from "../lib/elementos";
-import { listenUnidades } from "../lib/unidades";
+import { useElementos, useUnidades } from "../lib/fuentes";
 import { buscar } from "../lib/busqueda";
 import { useAuth } from "../auth/AuthContext";
 import FormElemento from "../components/FormElemento";
@@ -17,22 +16,16 @@ import {
 export default function Asistencia() {
   const { perfil } = useAuth();
   const esAdmin = perfil?.rol === "admin";
-  const [unidades, setUnidades] = useState([]);
   const [unidad, setUnidad] = useState(esAdmin ? "" : perfil?.unidad || "");
-  const [elementos, setElementos] = useState([]);
   const [fecha, setFecha] = useState(fechaLocal());
   const [asistencia, setAsistencia] = useState({});
   const [busqueda, setBusqueda] = useState("");
   const [error, setError] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
 
-  useEffect(() => {
-    if (esAdmin) return listenUnidades(setUnidades);
-  }, [esAdmin]);
-  useEffect(
-    () => listenElementos(setElementos, esAdmin ? unidad || undefined : unidad),
-    [esAdmin, unidad]
-  );
+  const unidades = useUnidades(esAdmin);
+  // Sin Unidad elegida (Admin) no se carga nada: antes leía todos los elementos.
+  const elementos = useElementos(unidad);
   useEffect(() => listenAsistenciaDia(fecha, unidad, setAsistencia), [fecha, unidad]);
 
   async function cambiar(el, estado) {

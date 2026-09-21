@@ -11,6 +11,7 @@ import RelacionPagos from "./pages/RelacionPagos";
 import Catalogo from "./pages/Catalogo";
 import Uniformidad from "./pages/Uniformidad";
 import Usuarios from "./pages/Usuarios";
+import EstadoConexion from "./components/EstadoConexion";
 import "./App.css";
 
 function Privado({ children, soloAdmin = false }) {
@@ -67,6 +68,7 @@ function AppRoutes() {
   return (
     <BrowserRouter>
       <Nav />
+      <EstadoConexion />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route

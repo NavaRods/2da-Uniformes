@@ -3,6 +3,19 @@ import { etiquetaMes } from "./cuotas";
 // Lógica pura de la Relación de pagos (sin Firebase): convierte pagos de
 // uniformes y de mensualidades en filas comparables y arma los totales.
 
+// Los abonos nuevos traen copiados el artículo y el saldo tras el abono, así
+// no hace falta leer el pedido. Los antiguos no (devuelve null).
+export function pedidoDeAbono(abono) {
+  if (abono.articulo === undefined) return null;
+  return {
+    articulo: abono.articulo,
+    productoNombre: abono.productoNombre,
+    talla: abono.talla,
+    color: abono.color,
+    saldoPendiente: abono.saldoTras ?? 1,
+  };
+}
+
 export function filaDeAbono(abono, pedido, elementoNombre) {
   return {
     id: `abono-${abono.id}`,

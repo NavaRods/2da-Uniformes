@@ -15,7 +15,7 @@ const orderBy = vi.fn();
 const where = vi.fn();
 const onSnapshot = vi.fn();
 const getDocs = vi.fn(async () => ({ docs: [] }));
-const batch = { delete: vi.fn(), commit: vi.fn(async () => {}) };
+const batch = { delete: vi.fn(), set: vi.fn(), update: vi.fn(), commit: vi.fn(async () => {}) };
 const collectionGroup = vi.fn((_db, name) => ({ __type: "collectionGroup", name }));
 
 vi.mock("firebase/firestore", () => ({
@@ -107,29 +107,59 @@ describe("marcarCambioPendiente", () => {
 });
 
 describe("registrarAbono", () => {
-  it("crea el abono y descuenta el saldo del pedido con increment negativo", async () => {
+  beforeEach(() => {
+    batch.set.mockClear();
+    batch.update.mockClear();
+    batch.commit.mockClear();
+    increment.mockClear();
+  });
+
+  it("crea el abono y descuenta el saldo con increment negativo, en un solo batch", async () => {
     await registrarAbono("el1", "ped1", { monto: "100", quienRecibio: "Carlos" });
 
-    // 1) Se agrega el documento del abono
-    expect(addDoc).toHaveBeenCalledTimes(1);
-    const [, abono] = addDoc.mock.calls[0];
+    expect(batch.set).toHaveBeenCalledTimes(1);
+    const [, abono] = batch.set.mock.calls[0];
     expect(abono.monto).toBe(100);
     expect(abono.quienRecibio).toBe("Carlos");
     expect(typeof abono.fechaLocal).toBe("string");
     expect(typeof abono.horaLocal).toBe("string");
 
-    // 2) Se descuenta del saldo del pedido, nunca se "cierra" a mano
-    expect(updateDoc).toHaveBeenCalledTimes(1);
-    const [, cambios] = updateDoc.mock.calls[0];
+    expect(batch.update).toHaveBeenCalledTimes(1);
+    const [, cambios] = batch.update.mock.calls[0];
     expect(increment).toHaveBeenCalledWith(-100);
     expect(cambios.saldoPendiente).toEqual({ __op: "increment", value: -100 });
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("copia el nombre del elemento y los datos del pedido al abono", async () => {
+    await registrarAbono("el1", "ped1", {
+      monto: 100,
+      elementoNombre: "Ana",
+      pedido: { articulo: "Playera — Negra", productoNombre: "Playera", talla: "M", color: "Negra", saldoPendiente: 250 },
+    });
+    const [, abono] = batch.set.mock.calls[0];
+    expect(abono).toMatchObject({
+      elementoNombre: "Ana",
+      articulo: "Playera — Negra",
+      productoNombre: "Playera",
+      talla: "M",
+      color: "Negra",
+      saldoTras: 150,
+    });
+  });
+
+  it("sin datos para copiar no agrega campos extra", async () => {
+    await registrarAbono("el1", "ped1", { monto: 10 });
+    const [, abono] = batch.set.mock.calls[0];
+    expect(abono).not.toHaveProperty("articulo");
+    expect(abono).not.toHaveProperty("elementoNombre");
   });
 
   it("varios abonos seguidos siguen descontando del mismo pedido", async () => {
     await registrarAbono("el1", "ped1", { monto: "50", quienRecibio: "A" });
     await registrarAbono("el1", "ped1", { monto: "75", quienRecibio: "B" });
 
-    expect(addDoc).toHaveBeenCalledTimes(2);
+    expect(batch.set).toHaveBeenCalledTimes(2);
     expect(increment).toHaveBeenNthCalledWith(1, -50);
     expect(increment).toHaveBeenNthCalledWith(2, -75);
   });

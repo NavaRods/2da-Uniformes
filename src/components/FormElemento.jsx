@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { crearElemento } from "../lib/elementos";
-import { listenUnidades } from "../lib/unidades";
+import { useUnidades } from "../lib/fuentes";
 import { useAuth } from "../auth/AuthContext";
 import { TURNOS, FUENTES } from "../lib/opciones";
 
@@ -26,7 +26,6 @@ const FORM_VACIO = {
 export default function FormElemento({ onCreado }) {
   const { perfil } = useAuth();
   const esAdmin = perfil?.rol === "admin";
-  const [unidades, setUnidades] = useState([]);
   const [form, setForm] = useState(() => ({
     ...FORM_VACIO,
     unidad: esAdmin ? "" : perfil?.unidad || "",
@@ -34,7 +33,7 @@ export default function FormElemento({ onCreado }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => listenUnidades(setUnidades), []);
+  const unidades = useUnidades();
 
   function setCampo(campo, valor) {
     setForm((f) => ({ ...f, [campo]: valor }));

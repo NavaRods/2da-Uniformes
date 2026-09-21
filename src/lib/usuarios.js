@@ -11,6 +11,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { vigilar } from "./estadoFirestore";
 
 export const ROLES = ["admin", "operador"];
 
@@ -26,14 +27,14 @@ export function listenUsuarios(callback) {
   const q = query(usuariosRef, orderBy("nombre"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  }, vigilar());
 }
 
 export function listenUsuario(correo, callback, onError) {
   return onSnapshot(
     doc(db, "usuarios", normalizarCorreo(correo)),
     (snap) => callback(snap.exists() ? { id: snap.id, ...snap.data() } : null),
-    onError
+    vigilar(onError)
   );
 }
 

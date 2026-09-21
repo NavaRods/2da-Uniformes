@@ -6,6 +6,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "../firebase";
 import { listenUsuario } from "../lib/usuarios";
+import { reiniciarFuentes } from "../lib/fuentes";
 
 const AuthContext = createContext(null);
 
@@ -23,7 +24,10 @@ export function AuthProvider({ children }) {
       setError(null);
       setUser(firebaseUser);
       setLoading(false);
-      if (!firebaseUser) setPerfil(null);
+      if (!firebaseUser) {
+        setPerfil(null);
+        reiniciarFuentes();
+      }
     });
     return unsub;
   }, []);

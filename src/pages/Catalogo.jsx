@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
-  listenCatalogo,
   sembrarCatalogoInicial,
   crearProducto,
   editarProducto,
@@ -9,6 +8,7 @@ import {
   vaciarCatalogo,
   TALLA_TIPO,
 } from "../lib/catalogo";
+import { useCatalogo } from "../lib/fuentes";
 import { useAuth } from "../auth/AuthContext";
 
 const NUEVO_VACIO = {
@@ -20,7 +20,6 @@ const NUEVO_VACIO = {
 export default function Catalogo() {
   const { perfil } = useAuth();
   const esAdmin = perfil?.rol === "admin";
-  const [productos, setProductos] = useState([]);
   const [modo, setModo] = useState(null); // null | "editar" | "nuevo"
   const [productoId, setProductoId] = useState("");
 
@@ -36,7 +35,7 @@ export default function Catalogo() {
   const [guardado, setGuardado] = useState(false);
   const [vaciando, setVaciando] = useState(false);
 
-  useEffect(() => listenCatalogo(setProductos), []);
+  const productos = useCatalogo();
 
   const producto = productos.find((p) => p.id === productoId);
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   filaDeAbono,
   filaDeCuota,
+  pedidoDeAbono,
   ordenarPorHora,
   resumenDia,
   moverDia,
@@ -107,5 +108,18 @@ describe("utilidades", () => {
   it("mueve días cruzando mes y año", () => {
     expect(moverDia("2026-09-30", 1)).toBe("2026-10-01");
     expect(moverDia("2026-01-01", -1)).toBe("2025-12-31");
+  });
+});
+
+describe("pedidoDeAbono", () => {
+  it("usa los datos copiados en el abono, sin leer el pedido", () => {
+    const p = pedidoDeAbono({ articulo: "Gorra", productoNombre: "Gorra", talla: "3", color: "", saldoTras: 0 });
+    expect(p).toMatchObject({ articulo: "Gorra", saldoPendiente: 0 });
+    const f = filaDeAbono({ id: "a", elementoId: "e", monto: 5 }, p, "Ana");
+    expect(f.etiqueta).toBe("Liquidado");
+  });
+
+  it("un abono antiguo (sin datos copiados) devuelve null", () => {
+    expect(pedidoDeAbono({ id: "a", monto: 5 })).toBeNull();
   });
 });

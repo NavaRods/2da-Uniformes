@@ -125,7 +125,7 @@ service cloud.firestore {
       function cuotaValida(datos, unidadElemento) {
         return datos.keys().hasOnly([
           "tipo", "meses", "montoPorMes", "total", "quienRecibio",
-          "fecha", "fechaLocal", "horaLocal", "unidad"
+          "fecha", "fechaLocal", "horaLocal", "unidad", "elementoNombre"
         ]) &&
         datos.unidad == unidadElemento &&
         datos.tipo == "mensualidad" &&
@@ -159,7 +159,11 @@ service cloud.firestore {
 
         // --- Abonos de un pedido ---
         function abonoValido(datos, unidadElemento) {
-          return datos.keys().hasOnly(["monto", "quienRecibio", "fecha", "fechaLocal", "horaLocal", "unidad"]) &&
+          return datos.keys().hasOnly([
+            "monto", "quienRecibio", "fecha", "fechaLocal", "horaLocal", "unidad",
+            // Copias del elemento y pedido para la Relación de pagos.
+            "elementoNombre", "articulo", "productoNombre", "talla", "color", "saldoTras"
+          ]) &&
           datos.unidad == unidadElemento &&
           datos.monto is number &&
           datos.fechaLocal is string;

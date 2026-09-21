@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
@@ -19,6 +19,7 @@ import {
   filaDeCuota,
   moverDia,
   ordenarPorHora,
+  pedidoDeAbono,
   resumenDia,
 } from "../lib/relacionPagos";
 
@@ -103,11 +104,15 @@ export default function RelacionPagos() {
   );
   useEffect(() => listenConfiguracion(setConfig, () => setConfig({})), []);
 
+  // Los pagos nuevos traen el nombre y el artículo copiados y no leen nada.
+  // Solo los antiguos consultan al elemento/pedido, y esas lecturas se
+  // recuerdan: si llega un pago nuevo y esto se repite, no se vuelve a leer.
+  const lecturasPrevias = useRef({ nombres: new Map(), pedidos: new Map() });
+
   useEffect(() => {
     let cancelado = false;
     async function enriquecer() {
-      // Un elemento con varios pagos se consulta una sola vez.
-      const nombres = new Map();
+      const { nombres, pedidos } = lecturasPrevias.current;
       const nombreDe = (id) => {
         if (!nombres.has(id)) {
           nombres.set(
@@ -117,18 +122,31 @@ export default function RelacionPagos() {
         }
         return nombres.get(id);
       };
+      const pedidoDe = (elementoId, pedidoId) => {
+        const clave = `${elementoId}/${pedidoId}`;
+        if (!pedidos.has(clave)) {
+          pedidos.set(
+            clave,
+            getDoc(doc(db, "elementos", elementoId, "pedidos", pedidoId)).then((s) =>
+              s.exists() ? s.data() : null
+            )
+          );
+        }
+        return pedidos.get(clave);
+      };
 
       const deAbonos = await Promise.all(
         abonos.map(async (a) => {
-          const [nombre, pedidoSnap] = await Promise.all([
-            nombreDe(a.elementoId),
-            getDoc(doc(db, "elementos", a.elementoId, "pedidos", a.pedidoId)),
+          const copiado = pedidoDeAbono(a);
+          const [nombre, pedido] = await Promise.all([
+            a.elementoNombre ?? nombreDe(a.elementoId),
+            copiado ?? pedidoDe(a.elementoId, a.pedidoId),
           ]);
-          return filaDeAbono(a, pedidoSnap.exists() ? pedidoSnap.data() : null, nombre);
+          return filaDeAbono(a, pedido, nombre);
         })
       );
       const deCuotas = await Promise.all(
-        cuotas.map(async (c) => filaDeCuota(c, await nombreDe(c.elementoId)))
+        cuotas.map(async (c) => filaDeCuota(c, c.elementoNombre ?? (await nombreDe(c.elementoId))))
       );
 
       if (!cancelado) setFilas(ordenarPorHora([...deAbonos, ...deCuotas]));

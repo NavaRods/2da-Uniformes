@@ -14,6 +14,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { vigilar, vigilarEscritura } from "./estadoFirestore";
 import { fechaLocalISO, horaLocalHHMM } from "./format";
 
 export function listenPedidosDeElemento(elementoId, callback) {
@@ -21,7 +22,7 @@ export function listenPedidosDeElemento(elementoId, callback) {
   const q = query(ref, orderBy("creadoEn", "desc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  }, vigilar());
 }
 
 // datos estructurados de la pieza (productoNombre, talla, color, cantidad)
@@ -33,7 +34,7 @@ export async function crearPedido(
   { articulo, precioTotal, productoNombre, talla, color, cantidad, unidad }
 ) {
   const ref = collection(db, "elementos", elementoId, "pedidos");
-  return addDoc(ref, {
+  return vigilarEscritura(addDoc(ref, {
     unidad,
     articulo,
     productoNombre: productoNombre || articulo,
@@ -49,7 +50,7 @@ export async function crearPedido(
     motivoCambio: "",
     fechaCambioSolicitado: null,
     creadoEn: serverTimestamp(),
-  });
+  }));
 }
 
 // Al entregar (o desmarcar) una pieza se deja constancia de quién la entregó
@@ -103,17 +104,35 @@ export function listenAbonosDePedido(elementoId, pedidoId, callback) {
   const q = query(ref, orderBy("fecha", "desc"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  });
+  }, vigilar());
 }
 
 // Registra un abono (pago parcial o liquidación). El saldo del pedido se va
 // descontando con cada abono hasta llegar a 0 (o menos), momento en el que
 // el pedido queda "liquidado" — esto se sigue evaluando en cada pantalla a
 // partir de saldoPendiente, nunca hay que "cerrar" el pedido a mano.
+// Datos del abono que se copian de su elemento y pedido al crearlo, para que
+// la Relación de pagos los muestre sin leer el elemento y el pedido de cada
+// pago. `pedido.saldoPendiente` es el saldo ANTES de este abono.
+export function datosCopiadosDeAbono(monto, elementoNombre, pedido) {
+  const copiados = {};
+  if (elementoNombre) copiados.elementoNombre = elementoNombre;
+  if (pedido) {
+    copiados.articulo = pedido.articulo;
+    copiados.productoNombre = pedido.productoNombre || pedido.articulo;
+    copiados.talla = pedido.talla || "";
+    copiados.color = pedido.color || "";
+    copiados.saldoTras = Number(pedido.saldoPendiente) - Number(monto);
+  }
+  return copiados;
+}
+
+// El abono y el descuento del saldo van en un solo batch: es atómico y solo
+// paga una vez la evaluación de reglas por escritura.
 export async function registrarAbono(
   elementoId,
   pedidoId,
-  { monto, quienRecibio, unidad }
+  { monto, quienRecibio, unidad, elementoNombre, pedido }
 ) {
   const abonosRef = collection(
     db,
@@ -123,19 +142,19 @@ export async function registrarAbono(
     pedidoId,
     "abonos"
   );
-  await addDoc(abonosRef, {
+  const pedidoRef = doc(db, "elementos", elementoId, "pedidos", pedidoId);
+  const lote = writeBatch(db);
+  lote.set(doc(abonosRef), {
     unidad,
     monto: Number(monto),
     quienRecibio: quienRecibio || "",
     fecha: serverTimestamp(),
     fechaLocal: fechaLocalISO(),
     horaLocal: horaLocalHHMM(),
+    ...datosCopiadosDeAbono(monto, elementoNombre, pedido),
   });
-
-  const pedidoRef = doc(db, "elementos", elementoId, "pedidos", pedidoId);
-  await updateDoc(pedidoRef, {
-    saldoPendiente: increment(-Number(monto)),
-  });
+  lote.update(pedidoRef, { saldoPendiente: increment(-Number(monto)) });
+  await vigilarEscritura(lote.commit());
 }
 
 // Todos los pagos (abonos) del día, para la "Relación de pagos" (detalle por
@@ -156,7 +175,7 @@ export function listenAbonosDelDia(fechaLocal, callback, onError, unidad) {
         ...d.data(),
       }))
     );
-  }, onError);
+  }, vigilar(onError));
 }
 
 // Todos los pedidos con un cambio de pieza pendiente (sin importar el día),
@@ -173,5 +192,5 @@ export function listenCambiosPendientes(callback, onError, unidad) {
         ...d.data(),
       }))
     );
-  }, onError);
+  }, vigilar(onError));
 }
