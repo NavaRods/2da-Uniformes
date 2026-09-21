@@ -1,87 +1,70 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const lote = { set: vi.fn(), update: vi.fn(), commit: vi.fn(async () => {}) };
-const getDocs = vi.fn();
-const doc = vi.fn(() => ({ __type: "doc-nuevo" }));
+const lote = { delete: vi.fn(), commit: vi.fn(async () => {}) };
+const doc = vi.fn((...args) => ({ __type: "doc", path: args.slice(1) }));
 
 vi.mock("firebase/firestore", () => ({
-  collection: vi.fn((_db, nombre) => ({ __type: "collection", nombre })),
+  collection: vi.fn(() => ({ __type: "collection" })),
   addDoc: vi.fn(),
   deleteDoc: vi.fn(),
   doc: (...args) => doc(...args),
-  getDocs: (...args) => getDocs(...args),
   onSnapshot: vi.fn(),
   query: vi.fn((ref) => ref),
-  where: vi.fn(),
   orderBy: vi.fn(),
   serverTimestamp: () => "SERVER_TIMESTAMP",
   writeBatch: () => lote,
 }));
 vi.mock("../firebase", () => ({ db: {} }));
 
-const { cargarUnidadesIniciales, compararUnidades, UNIDADES_INICIALES } = await import("./unidades");
-
-const docsDeUnidades = (nombres) => ({ docs: nombres.map((nombre) => ({ data: () => ({ nombre }) })) });
-const elementos = (n) => ({
-  forEach: (fn) => Array.from({ length: n }, (_, i) => fn({ ref: `el${i}` })),
-});
+const { compararUnidades, existeUnidad, eliminarUnidades, usoDeUnidades } = await import("./unidades");
 
 beforeEach(() => {
-  lote.set.mockClear();
-  lote.update.mockClear();
+  lote.delete.mockClear();
   lote.commit.mockClear();
-  getDocs.mockReset();
 });
 
-describe("lista de Unidades", () => {
-  it("son las 15 que existen, sin la 5a, 6a, 9a ni 16a", () => {
-    expect(UNIDADES_INICIALES).toHaveLength(15);
-    for (const faltante of ["5a", "6a", "9a", "16a"]) {
-      expect(UNIDADES_INICIALES).not.toContain(faltante);
-    }
-    expect(new Set(UNIDADES_INICIALES).size).toBe(15);
-  });
-
+describe("orden y duplicados", () => {
   it("se ordenan numéricamente: 2a antes que 10a", () => {
     const orden = ["10a", "2a", "1a", "19a"].map((nombre) => ({ nombre })).sort(compararUnidades);
     expect(orden.map((u) => u.nombre)).toEqual(["1a", "2a", "10a", "19a"]);
   });
+
+  it("detecta una Unidad repetida sin importar mayúsculas ni espacios", () => {
+    const unidades = [{ nombre: "1a" }, { nombre: "10a" }];
+    expect(existeUnidad(unidades, " 1A ")).toBe(true);
+    expect(existeUnidad(unidades, "2a")).toBe(false);
+  });
 });
 
-describe("cargarUnidadesIniciales", () => {
-  it("crea las 15 cuando no hay ninguna y pasa los elementos de 2da Unidad a 2a", async () => {
-    getDocs.mockResolvedValueOnce(docsDeUnidades([])).mockResolvedValueOnce(elementos(3));
-    const r = await cargarUnidadesIniciales();
-    expect(r).toEqual({ creadas: 15, yaExistian: 0, renombrados: 3 });
-    expect(lote.set).toHaveBeenCalledTimes(15);
-    expect(lote.update).toHaveBeenCalledTimes(3);
-    expect(lote.update).toHaveBeenCalledWith("el0", { unidad: "2a" });
+describe("eliminarUnidades", () => {
+  it("borra todas las Unidades pedidas en un solo lote", async () => {
+    await eliminarUnidades(["a", "b", "c"]);
+    expect(lote.delete).toHaveBeenCalledTimes(3);
+    expect(lote.delete).toHaveBeenCalledWith({ __type: "doc", path: ["unidades", "b"] });
     expect(lote.commit).toHaveBeenCalledTimes(1);
   });
 
-  it("solo crea las que faltan", async () => {
-    getDocs
-      .mockResolvedValueOnce(docsDeUnidades(["1a", "2a", "3a"]))
-      .mockResolvedValueOnce(elementos(0));
-    const r = await cargarUnidadesIniciales();
-    expect(r).toMatchObject({ creadas: 12, yaExistian: 3, renombrados: 0 });
-    expect(lote.set).toHaveBeenCalledTimes(12);
-    const nombres = lote.set.mock.calls.map(([, datos]) => datos.nombre);
-    expect(nombres).not.toContain("1a");
+  it("parte en varios lotes cuando son muchas", async () => {
+    await eliminarUnidades(Array.from({ length: 900 }, (_, i) => `u${i}`));
+    expect(lote.commit).toHaveBeenCalledTimes(3);
   });
 
-  it("repetirla con todo ya cargado no escribe nada", async () => {
-    getDocs
-      .mockResolvedValueOnce(docsDeUnidades(UNIDADES_INICIALES))
-      .mockResolvedValueOnce(elementos(0));
-    const r = await cargarUnidadesIniciales();
-    expect(r).toEqual({ creadas: 0, yaExistian: 15, renombrados: 0 });
+  it("sin Unidades no escribe nada", async () => {
+    await eliminarUnidades([]);
     expect(lote.commit).not.toHaveBeenCalled();
   });
+});
 
-  it("parte en varios lotes cuando hay muchos elementos", async () => {
-    getDocs.mockResolvedValueOnce(docsDeUnidades([])).mockResolvedValueOnce(elementos(900));
-    await cargarUnidadesIniciales();
-    expect(lote.commit).toHaveBeenCalledTimes(3); // 915 operaciones en lotes de 400
+describe("usoDeUnidades", () => {
+  it("cuenta elementos y usuarios por Unidad", () => {
+    const uso = usoDeUnidades(
+      [{ nombre: "1a" }, { nombre: "2a" }],
+      [{ unidad: "1a" }, { unidad: "1a" }, { unidad: "2a" }, { unidad: "otra" }],
+      [{ unidad: "2a" }, { unidad: null }]
+    );
+    expect(uso).toEqual({
+      "1a": { elementos: 2, usuarios: 0 },
+      "2a": { elementos: 1, usuarios: 1 },
+    });
   });
 });

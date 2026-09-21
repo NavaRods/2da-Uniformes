@@ -8,12 +8,14 @@ import {
   ROLES,
 } from "../lib/usuarios";
 import {
-  listenUnidades,
   crearUnidad,
-  cargarUnidadesIniciales,
-  UNIDADES_INICIALES,
-  RENOMBRES,
+  eliminarUnidad,
+  eliminarUnidades,
+  existeUnidad,
+  usoDeUnidades,
 } from "../lib/unidades";
+import { contarElementosPorUnidad } from "../lib/elementos";
+import { useUnidades } from "../lib/fuentes";
 import { migrarDatosAnteriores } from "../lib/migracion";
 import { useAuth } from "../auth/AuthContext";
 
@@ -25,7 +27,10 @@ export default function Usuarios() {
   const [migrando, setMigrando] = useState(false);
   const [resultadoMigracion, setResultadoMigracion] = useState("");
   const [usuarios, setUsuarios] = useState([]);
-  const [unidades, setUnidades] = useState([]);
+  const [conteos, setConteos] = useState({}); // elementos por Unidad; null = no se pudo contar
+  const [nombreUnidad, setNombreUnidad] = useState("");
+  const [errorUnidades, setErrorUnidades] = useState("");
+  const [trabajandoUnidades, setTrabajandoUnidades] = useState(false);
   const [form, setForm] = useState(FORM_VACIO);
   const [editando, setEditando] = useState(null); // correo del usuario en edición, o null
   const [guardando, setGuardando] = useState(false);
@@ -35,7 +40,19 @@ export default function Usuarios() {
   const [creandoUnidad, setCreandoUnidad] = useState(false);
 
   useEffect(() => listenUsuarios(setUsuarios), []);
-  useEffect(() => listenUnidades(setUnidades), []);
+  const unidades = useUnidades();
+  // Solo se cuentan (no se descargan) los elementos de cada Unidad; se vuelve a
+  // contar cuando cambia la lista de Unidades.
+  const nombresUnidades = unidades.map((u) => u.nombre).join("|");
+  useEffect(() => {
+    let cancelado = false;
+    contarElementosPorUnidad(nombresUnidades ? nombresUnidades.split("|") : []).then((r) => {
+      if (!cancelado) setConteos(r);
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [nombresUnidades]);
 
   function setCampo(campo, valor) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -86,34 +103,76 @@ export default function Usuarios() {
     }
   }
 
-  async function onCargarUnidades() {
-    const [[desde, hacia]] = Object.entries(RENOMBRES);
-    if (
-      !confirm(
-        `Se crearán las Unidades que falten de la lista (${UNIDADES_INICIALES.length} en total), ` +
-          `los elementos que hoy están en "${desde}" pasarán a "${hacia}", y después se actualizarán ` +
-          "pedidos, pagos, mensualidades y asistencia anterior. Se puede repetir sin problema. ¿Continuar?"
-      )
-    ) {
+  // Si el conteo de una Unidad no está listo o falló, cuenta como "en uso"
+  // (así nunca se avisa de menos al quitarla).
+  const uso = usoDeUnidades(unidades, [], usuarios);
+  for (const nombre of Object.keys(uso)) {
+    const n = conteos[nombre];
+    uso[nombre].elementos = n ?? 0;
+    uso[nombre].desconocido = n == null;
+  }
+
+  async function onAgregarUnidad(e) {
+    e.preventDefault();
+    const nombre = nombreUnidad.trim();
+    if (!nombre) return;
+    if (existeUnidad(unidades, nombre)) {
+      setErrorUnidades(`La Unidad "${nombre}" ya está en la lista.`);
       return;
     }
-    setMigrando(true);
-    setResultadoMigracion("");
+    setTrabajandoUnidades(true);
+    setErrorUnidades("");
     try {
-      const u = await cargarUnidadesIniciales();
-      const r = await migrarDatosAnteriores();
-      setResultadoMigracion(
-        `Listo. Unidades creadas: ${u.creadas} (ya existían ${u.yaExistian}). ` +
-          `Elementos pasados de "${desde}" a "${hacia}": ${u.renombrados}. ` +
-          `Actualizados: ${r.pedidos} pedidos, ${r.abonos} abonos, ${r.cuotas} mensualidades. ` +
-          `Días de asistencia anterior migrados: ${r.asistencias}` +
-          (r.omitidos ? ` (${r.omitidos} registros sin Unidad se dejaron sin tocar).` : ".")
-      );
-    } catch (e) {
-      console.error("Carga de Unidades:", e);
-      setResultadoMigracion("No se pudo completar. Inténtalo de nuevo; lo ya hecho no se repite.");
+      await crearUnidad(nombre);
+      setNombreUnidad("");
+    } catch {
+      setErrorUnidades("No se pudo agregar la Unidad. Verifica tu conexión e inténtalo de nuevo.");
     } finally {
-      setMigrando(false);
+      setTrabajandoUnidades(false);
+    }
+  }
+
+  // Quitar una Unidad de la lista no borra elementos ni usuarios: siguen
+  // guardados con su nombre, solo dejan de poder elegirse en los selectores.
+  function avisoDeUso(nombre) {
+    const { elementos: e, usuarios: u, desconocido } = uso[nombre] || { elementos: 0, usuarios: 0 };
+    if (desconocido) return " No se pudo comprobar si la usan elementos; podrían usarla y seguirían guardados con ese nombre.";
+    if (!e && !u) return "";
+    const partes = [];
+    if (e) partes.push(`${e} ${e === 1 ? "elemento" : "elementos"}`);
+    if (u) partes.push(`${u} ${u === 1 ? "usuario" : "usuarios"}`);
+    return ` La usan ${partes.join(" y ")}; seguirán guardados con ese nombre, pero no podrás elegirla en los selectores hasta volver a agregarla.`;
+  }
+
+  async function onEliminarUnidad(u) {
+    if (!confirm(`¿Quitar la Unidad "${u.nombre}" de la lista?${avisoDeUso(u.nombre)}`)) return;
+    setTrabajandoUnidades(true);
+    setErrorUnidades("");
+    try {
+      await eliminarUnidad(u.id);
+    } catch {
+      setErrorUnidades("No se pudo quitar la Unidad. Verifica tu conexión e inténtalo de nuevo.");
+    } finally {
+      setTrabajandoUnidades(false);
+    }
+  }
+
+  async function onEliminarTodasUnidades() {
+    const enUso = unidades.filter((u) => uso[u.nombre]?.elementos || uso[u.nombre]?.usuarios || uso[u.nombre]?.desconocido);
+    const aviso = enUso.length
+      ? ` ${enUso.length} de ellas las usan elementos o usuarios (${enUso.map((u) => u.nombre).join(", ")}); seguirán guardados con ese nombre, pero no podrás elegirlas en los selectores hasta volver a agregarlas.`
+      : "";
+    if (!confirm(`¿Quitar las ${unidades.length} Unidades de la lista?${aviso} No se borra ningún elemento ni usuario.`)) {
+      return;
+    }
+    setTrabajandoUnidades(true);
+    setErrorUnidades("");
+    try {
+      await eliminarUnidades(unidades.map((u) => u.id));
+    } catch {
+      setErrorUnidades("No se pudieron quitar las Unidades. Verifica tu conexión e inténtalo de nuevo.");
+    } finally {
+      setTrabajandoUnidades(false);
     }
   }
 
@@ -316,20 +375,59 @@ export default function Usuarios() {
       </ul>
 
       <div className="card">
+        <h2>Unidades</h2>
+        <form onSubmit={onAgregarUnidad} className="inline-form">
+          <input
+            placeholder="Nombre de la Unidad (ej. 1a)"
+            value={nombreUnidad}
+            onChange={(e) => setNombreUnidad(e.target.value)}
+          />
+          <button type="submit" className="btn-primary" disabled={trabajandoUnidades || !nombreUnidad.trim()}>
+            Agregar
+          </button>
+        </form>
+        {errorUnidades && <p className="error">{errorUnidades}</p>}
+
+        {unidades.length === 0 && <p className="nota">Todavía no hay Unidades en la lista.</p>}
+        <ul className="lista">
+          {unidades.map((u) => {
+            const { elementos: e, usuarios: us, desconocido } = uso[u.nombre];
+            return (
+              <li key={u.id} className="carrito-item">
+                <span>
+                  <strong>{u.nombre}</strong>
+                  <span className="nota">
+                    {" "}
+                    · {desconocido ? "…" : e} {e === 1 ? "elemento" : "elementos"} · {us} {us === 1 ? "usuario" : "usuarios"}
+                  </span>
+                </span>
+                <button
+                  className="btn-secondary btn-small"
+                  onClick={() => onEliminarUnidad(u)}
+                  disabled={trabajandoUnidades}
+                >
+                  Quitar
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {unidades.length > 1 && (
+          <button className="btn-secondary" onClick={onEliminarTodasUnidades} disabled={trabajandoUnidades}>
+            Quitar todas las Unidades ({unidades.length})
+          </button>
+        )}
+      </div>
+
+      <div className="card">
         <h2>Mantenimiento</h2>
         <p className="nota">
-          <strong>Cargar lista de Unidades</strong> crea las {UNIDADES_INICIALES.length} Unidades del
-          club ({UNIDADES_INICIALES.join(", ")}), pasa los elementos que estaban en "2da Unidad" a
-          "2a" y actualiza los datos anteriores. Solo hace falta una vez.
+          Si la app tenía datos antes de que existieran las Unidades, este botón les asigna la de su
+          elemento y pasa la asistencia anterior al formato nuevo. Solo hace falta una vez.
         </p>
-        <div className="inline-form">
-          <button className="btn-primary" onClick={onCargarUnidades} disabled={migrando}>
-            {migrando ? "Trabajando..." : "Cargar lista de Unidades"}
-          </button>
-          <button className="btn-secondary" onClick={onMigrar} disabled={migrando}>
-            Solo actualizar datos anteriores
-          </button>
-        </div>
+        <button className="btn-secondary" onClick={onMigrar} disabled={migrando}>
+          {migrando ? "Actualizando..." : "Actualizar datos anteriores"}
+        </button>
         {resultadoMigracion && <p className="nota">{resultadoMigracion}</p>}
       </div>
     </div>

@@ -3,27 +3,16 @@ import {
   addDoc,
   deleteDoc,
   doc,
-  getDocs,
   onSnapshot,
   query,
-  where,
   orderBy,
   serverTimestamp,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { vigilar } from "./estadoFirestore";
 
 const unidadesRef = collection(db, "unidades");
-
-// Unidades que existen (no hay la 5a, 6a, 9a ni 16a).
-export const UNIDADES_INICIALES = [
-  "1a", "2a", "3a", "4a", "7a", "8a", "10a", "11a",
-  "12a", "13a", "14a", "15a", "17a", "18a", "19a",
-];
-
-// Nombres anteriores que ahora tienen otro nombre en la lista. Los elementos
-// guardados con el nombre viejo se pasan al nuevo para que no queden huérfanos.
-export const RENOMBRES = { "2da Unidad": "2a" };
 
 // "2a" antes que "10a" (orden numérico, no alfabético).
 export function compararUnidades(a, b) {
@@ -34,7 +23,13 @@ export function listenUnidades(callback) {
   const q = query(unidadesRef, orderBy("nombre"));
   return onSnapshot(q, (snap) => {
     callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(compararUnidades));
-  });
+  }, vigilar());
+}
+
+// Misma Unidad aunque cambien mayúsculas o espacios ("1A" = "1a ").
+export function existeUnidad(unidades, nombre) {
+  const buscada = nombre.trim().toLowerCase();
+  return unidades.some((u) => u.nombre.trim().toLowerCase() === buscada);
 }
 
 export async function crearUnidad(nombre) {
@@ -48,31 +43,21 @@ export async function eliminarUnidad(unidadId) {
   return deleteDoc(doc(db, "unidades", unidadId));
 }
 
-// Crea las Unidades de la lista que aún no existen y pasa los elementos de un
-// nombre anterior al nuevo. Se puede repetir sin duplicar nada.
-export async function cargarUnidadesIniciales() {
-  const existentes = new Set((await getDocs(unidadesRef)).docs.map((d) => d.data().nombre));
-  const faltantes = UNIDADES_INICIALES.filter((n) => !existentes.has(n));
-
-  const operaciones = faltantes.map(
-    (nombre) => (lote) => lote.set(doc(unidadesRef), { nombre, creadoEn: serverTimestamp() })
-  );
-
-  let renombrados = 0;
-  for (const [desde, hacia] of Object.entries(RENOMBRES)) {
-    const snap = await getDocs(query(collection(db, "elementos"), where("unidad", "==", desde)));
-    snap.forEach((d) => {
-      operaciones.push((lote) => lote.update(d.ref, { unidad: hacia }));
-      renombrados += 1;
-    });
-  }
-
-  // Firestore admite 500 operaciones por lote.
-  for (let i = 0; i < operaciones.length; i += 400) {
+// Quita varias Unidades de la lista de una sola vez. No toca elementos ni
+// usuarios: siguen guardados con el nombre de su Unidad.
+export async function eliminarUnidades(unidadIds) {
+  for (let i = 0; i < unidadIds.length; i += 400) {
     const lote = writeBatch(db);
-    operaciones.slice(i, i + 400).forEach((op) => op(lote));
+    unidadIds.slice(i, i + 400).forEach((id) => lote.delete(doc(db, "unidades", id)));
     await lote.commit();
   }
+}
 
-  return { creadas: faltantes.length, yaExistian: UNIDADES_INICIALES.length - faltantes.length, renombrados };
+// Cuántos elementos y usuarios usan cada Unidad, para avisar antes de quitarla.
+export function usoDeUnidades(unidades, elementos, usuarios) {
+  const uso = {};
+  for (const u of unidades) uso[u.nombre] = { elementos: 0, usuarios: 0 };
+  for (const e of elementos) if (uso[e.unidad]) uso[e.unidad].elementos += 1;
+  for (const u of usuarios) if (uso[u.unidad]) uso[u.unidad].usuarios += 1;
+  return uso;
 }
