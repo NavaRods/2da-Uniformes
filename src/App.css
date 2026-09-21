@@ -1129,6 +1129,7 @@ th {
 
 .estado-fuerza tfoot th {
   border-top: 2px solid currentColor;
+}
 
 /* Avisos de conexión y de cuota de Firebase (bajo la barra de navegación). */
 .estado-avisos {
