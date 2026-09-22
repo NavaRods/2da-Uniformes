@@ -6,14 +6,13 @@ import FormElemento from "../components/FormElemento";
 import ListaBajas from "../components/ListaBajas";
 import EstadoFuerza from "../components/EstadoFuerza";
 import { comparadorPorJerarquia } from "../lib/grados";
+import { estaActivo } from "../lib/elementos";
 import {
   ESTADOS,
   fechaLocal,
   listenAsistenciaDia,
   marcarAsistencia,
   normalizarEstado,
-  estaDeBaja,
-  visibleEnLista,
 } from "../lib/asistencia";
 
 export default function Asistencia() {
@@ -42,18 +41,14 @@ export default function Asistencia() {
     }
   }
 
-  // Sin búsqueda: solo la lista del día (sin las bajas anteriores).
-  // Con búsqueda: se consulta a todos, incluidas las bajas.
   const elementosDeUnidad = esAdmin ? elementos.filter((e) => !unidad || e.unidad === unidad) : elementos;
-  const visibles = (busqueda.trim()
-    ? buscar(elementosDeUnidad, busqueda, (el) => el.nombre)
-    : elementosDeUnidad.filter((el) => visibleEnLista(el, fecha))
-  )
+  // Los elementos de baja no aparecen en la Lista (ni al buscar): para eso
+  // está la pestaña de Bajas, donde se pueden reactivar.
+  const activos = elementosDeUnidad.filter((el) => estaActivo(el));
+  const visibles = (busqueda.trim() ? buscar(activos, busqueda, (el) => el.nombre) : activos)
     .slice()
     .sort(comparadorPorJerarquia(grados));
-  // Elementos dados de baja (de cualquier fecha): salen de las listas y se
-  // ven en su propio apartado.
-  const bajas = elementosDeUnidad.filter((el) => el.fechaBaja);
+  const bajas = elementosDeUnidad.filter((el) => !estaActivo(el));
 
   return (
     <div className="page">
@@ -99,7 +94,7 @@ export default function Asistencia() {
             />
             <input
               type="search"
-              placeholder="Buscar elemento (incluye bajas)..."
+              placeholder="Buscar elemento..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
             />
@@ -126,7 +121,13 @@ export default function Asistencia() {
           </div>
 
           {vista === "fuerza" && (
-            <EstadoFuerza elementos={elementosDeUnidad} grados={grados} unidad={unidad} fecha={fecha} />
+            <EstadoFuerza
+              elementos={elementosDeUnidad}
+              asistencia={asistencia}
+              grados={grados}
+              unidad={unidad}
+              fecha={fecha}
+            />
           )}
 
           {vista === "bajas" && <ListaBajas bajas={bajas} />}
@@ -135,16 +136,12 @@ export default function Asistencia() {
           <>
           <ul className="lista">
             {visibles.map((el) => {
-              const baja = estaDeBaja(el, fecha);
-              const estado = baja ? "baja" : normalizarEstado(asistencia[el.id]);
+              const estado = normalizarEstado(asistencia[el.id]);
               return (
                 <li key={el.id} className="asistencia-row">
                   <span>
                     {el.nombre}
                     {el.gradoMilitar && <span className="tag">{el.gradoMilitar}</span>}
-                    {el.fechaBaja && (
-                      <span className="tag tag-baja">Baja {el.fechaBaja}</span>
-                    )}
                   </span>
                   <select
                     value={estado}
