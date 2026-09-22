@@ -35,16 +35,31 @@ describe("grados", () => {
 
   it("ordena elementos por jerarquía y luego por nombre; sin grado al final", () => {
     const els = [
-      { nombre: "Zoe", gradoMilitar: "Cadete" },
-      { nombre: "Ana", gradoMilitar: "Cadete" },
-      { nombre: "Sin grado" },
-      { nombre: "Beto", gradoMilitar: "Capitán 2do" },
+      { nombre: "Zoe", grupo: "Varonil", gradoMilitar: "Cadete" },
+      { nombre: "Ana", grupo: "Varonil", gradoMilitar: "Cadete" },
+      { nombre: "Sin grado", grupo: "Varonil" },
+      { nombre: "Beto", grupo: "Varonil", gradoMilitar: "Capitán 2do" },
     ];
     expect(els.sort(comparadorPorJerarquia(G)).map((e) => e.nombre)).toEqual([
       "Beto",
       "Ana",
       "Zoe",
       "Sin grado",
+    ]);
+  });
+
+  it("ordena primero Varonil y luego Femenino, cada uno por jerarquía", () => {
+    const els = [
+      { nombre: "Diana", grupo: "Femenino", gradoMilitar: "Capitán 2do" },
+      { nombre: "Carlos", grupo: "Varonil", gradoMilitar: "Cadete" },
+      { nombre: "Elena", grupo: "Femenino", gradoMilitar: "Cadete" },
+      { nombre: "Beto", grupo: "Varonil", gradoMilitar: "Capitán 2do" },
+    ];
+    expect(els.sort(comparadorPorJerarquia(G)).map((e) => e.nombre)).toEqual([
+      "Beto",
+      "Carlos",
+      "Diana",
+      "Elena",
     ]);
   });
 });

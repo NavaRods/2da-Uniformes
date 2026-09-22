@@ -34,11 +34,14 @@ export function categoriaDeGrado(grados, nombre) {
   return grados.find((g) => g.nombre === nombre)?.categoria || "";
 }
 
-// Comparador para ordenar listas de elementos: primero por jerarquía (el más
-// alto primero, sin grado al final) y luego por nombre.
+// Comparador para ordenar listas de elementos: primero Varonil y luego
+// Femenino, dentro de cada grupo por jerarquía (el más alto primero, sin
+// grado al final) y por último por nombre.
 export function comparadorPorJerarquia(grados) {
   const rango = (nombre) => grados.find((g) => g.nombre === nombre)?.rango ?? -1;
+  const ordenGrupo = (grupo) => (grupo === "Femenino" ? 1 : 0);
   return (a, b) =>
+    ordenGrupo(a.grupo) - ordenGrupo(b.grupo) ||
     rango(b.gradoMilitar) - rango(a.gradoMilitar) ||
     (a.nombre || "").localeCompare(b.nombre || "", "es");
 }
