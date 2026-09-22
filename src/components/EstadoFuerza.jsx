@@ -118,22 +118,9 @@ export default function EstadoFuerza({ elementos, asistencia, grados, unidad, fe
           pestaña "Lista" y después genera el Estado de Fuerza; si lo generas sin haber
           pasado lista, saldrá todo en 0.
         </p>
-        <div className="acciones-pedido">
-          <button type="button" className="btn-primary" onClick={() => setGenerado(true)}>
-            Generar Estado de Fuerza
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={abrirConfig}
-            aria-expanded={mostrarConfig}
-            aria-label="Configurar número de WhatsApp"
-            title="Configurar número de WhatsApp"
-          >
-            ⚙️
-          </button>
-        </div>
-        {formularioConfig()}
+        <button type="button" className="btn-primary" onClick={() => setGenerado(true)}>
+          Generar Estado de Fuerza
+        </button>
       </div>
     );
   }
