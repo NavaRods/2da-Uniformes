@@ -4,7 +4,6 @@ import { estaDeBaja, normalizarEstado } from "../lib/asistencia";
 import { guardarNumeroWhatsapp, listenConfiguracion } from "../lib/configuracion";
 import { etiquetaDia } from "../lib/relacionPagos";
 import { linkWhatsapp, mensajeEstadoFuerza, normalizarTelefono, telefonoValido } from "../lib/whatsapp";
-import { useAuth } from "../auth/AuthContext";
 
 // Estado de Fuerza de una Unidad en el día seleccionado: cuenta a quienes se
 // marcaron como Asistencia ese día (no todo el padrón), por categoría militar
@@ -14,8 +13,6 @@ import { useAuth } from "../auth/AuthContext";
 // pasado lista, todo sale en 0 (nadie está marcado como Asistencia todavía),
 // y se puede volver a generar cuando se quiera.
 export default function EstadoFuerza({ elementos, asistencia, grados, unidad, fecha }) {
-  const { perfil } = useAuth();
-  const esAdmin = perfil?.rol === "admin";
   const [novedades, setNovedades] = useState("");
   const [config, setConfig] = useState(null);
   const [generado, setGenerado] = useState(false);
@@ -75,7 +72,7 @@ export default function EstadoFuerza({ elementos, asistencia, grados, unidad, fe
   }
 
   function formularioConfig() {
-    if (!esAdmin || !mostrarConfig) return null;
+    if (!mostrarConfig) return null;
     return (
       <form onSubmit={guardarConfig} className="card">
         <h2>Número de WhatsApp</h2>
@@ -125,18 +122,16 @@ export default function EstadoFuerza({ elementos, asistencia, grados, unidad, fe
           <button type="button" className="btn-primary" onClick={() => setGenerado(true)}>
             Generar Estado de Fuerza
           </button>
-          {esAdmin && (
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={abrirConfig}
-              aria-expanded={mostrarConfig}
-              aria-label="Configurar número de WhatsApp"
-              title="Configurar número de WhatsApp"
-            >
-              ⚙️
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={abrirConfig}
+            aria-expanded={mostrarConfig}
+            aria-label="Configurar número de WhatsApp"
+            title="Configurar número de WhatsApp"
+          >
+            ⚙️
+          </button>
         </div>
         {formularioConfig()}
       </div>
@@ -207,26 +202,20 @@ export default function EstadoFuerza({ elementos, asistencia, grados, unidad, fe
         <button type="button" className="btn-primary" onClick={enviarPorWhatsapp}>
           📲 Enviar Estado de Fuerza por WhatsApp
         </button>
-        {esAdmin && (
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={abrirConfig}
-            aria-expanded={mostrarConfig}
-            aria-label="Configurar número de WhatsApp"
-            title="Configurar número de WhatsApp"
-          >
-            ⚙️
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={abrirConfig}
+          aria-expanded={mostrarConfig}
+          aria-label="Configurar número de WhatsApp"
+          title="Configurar número de WhatsApp"
+        >
+          ⚙️
+        </button>
       </div>
 
       {!hayNumero && config && !mostrarConfig && (
-        <p className="nota">
-          {esAdmin
-            ? "Aún no hay un número configurado: pulsa ⚙️ para elegir a quién se envía."
-            : "Aún no hay un número configurado. Pide a un Admin que lo configure."}
-        </p>
+        <p className="nota">Aún no hay un número configurado: pulsa ⚙️ para elegir a quién se envía.</p>
       )}
 
       {formularioConfig()}
