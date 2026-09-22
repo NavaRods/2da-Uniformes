@@ -1177,30 +1177,73 @@ th {
   width: 90px;
 }
 
-/* --- BuscadorElemento: campo de búsqueda con lista de resultados --- */
+/* --- BuscadorElemento: campo tipo select que despliega la lista completa,
+   con una barra de búsqueda arriba para filtrarla. --- */
 .buscador-elemento {
   position: relative;
 }
 
-.buscador-elemento input {
+.buscador-elemento-campo {
   width: 100%;
+  padding: 10px 13px;
+  font-size: 15px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
 }
 
-.buscador-elemento-resultados {
+.buscador-elemento-campo[aria-expanded="true"] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.buscador-elemento-placeholder,
+.buscador-elemento-valor {
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.buscador-elemento-placeholder {
+  color: var(--text-muted);
+}
+
+.buscador-elemento-flecha {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.buscador-elemento-panel {
   position: absolute;
   z-index: 20;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  max-height: 260px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 4px;
-  list-style: none;
+  padding: 8px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
+}
+
+.buscador-elemento-buscar {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.buscador-elemento-resultados {
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .buscador-elemento-resultados li + li {

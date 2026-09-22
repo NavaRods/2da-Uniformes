@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useElementos, useUnidades, useCatalogo } from "../lib/fuentes";
 import { requiereTalla, TALLA_TIPO } from "../lib/catalogo";
 import BuscadorElemento from "../components/BuscadorElemento";
+import SelectorBuscable from "../components/SelectorBuscable";
 import { crearPedido, registrarAbono } from "../lib/pedidos";
 import { linkWhatsapp } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
@@ -210,14 +211,14 @@ export default function Uniformidad() {
 
           <div className="card">
             <h2>Agregar artículo</h2>
-            <select value={productoId} onChange={(e) => onSeleccionarProducto(e.target.value)}>
-              <option value="">Selecciona un producto...</option>
-              {catalogo.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre} — ${p.precio}
-                </option>
-              ))}
-            </select>
+            <SelectorBuscable
+              items={catalogo}
+              valorId={productoId}
+              obtenerTexto={(p) => `${p.nombre} — $${p.precio}`}
+              onSeleccionar={onSeleccionarProducto}
+              placeholder="Selecciona un producto..."
+              placeholderBusqueda="Buscar por nombre..."
+            />
 
             {producto?.colores?.length > 0 && (
               <select value={color} onChange={(e) => setColor(e.target.value)}>
