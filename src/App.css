@@ -1176,3 +1176,56 @@ th {
 .campo-precio input {
   width: 90px;
 }
+
+/* --- BuscadorElemento: campo de búsqueda con lista de resultados --- */
+.buscador-elemento {
+  position: relative;
+}
+
+.buscador-elemento input {
+  width: 100%;
+}
+
+.buscador-elemento-resultados {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.buscador-elemento-resultados li + li {
+  margin-top: 2px;
+}
+
+.buscador-elemento-resultados button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.buscador-elemento-resultados button:hover {
+  background: var(--primary-soft);
+}
+
+.buscador-elemento-vacio {
+  padding: 8px 10px;
+  color: var(--text-muted);
+  font-size: 14px;
+}

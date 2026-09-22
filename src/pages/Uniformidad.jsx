@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useElementos, useUnidades, useCatalogo } from "../lib/fuentes";
 import { requiereTalla, TALLA_TIPO } from "../lib/catalogo";
+import BuscadorElemento from "../components/BuscadorElemento";
 import { crearPedido, registrarAbono } from "../lib/pedidos";
 import { linkWhatsapp } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
@@ -163,14 +164,7 @@ export default function Uniformidad() {
               ))}
             </select>
           )}
-          <select value="" onChange={(e) => elegirElemento(e.target.value)}>
-            <option value="">Buscar elemento...</option>
-            {elementos.map((el) => (
-              <option key={el.id} value={el.id}>
-                {el.nombre}
-              </option>
-            ))}
-          </select>
+          <BuscadorElemento elementos={elementos} onSeleccionar={elegirElemento} />
         </div>
       )}
 
