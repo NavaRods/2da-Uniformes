@@ -1,10 +1,11 @@
 import { initializeApp } from "firebase/app";
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, connectAuthEmulator } from "firebase/auth";
 import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  connectFirestoreEmulator,
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -18,11 +19,19 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 
+// En desarrollo local, por defecto se habla con los emuladores (Firestore +
+// Auth) en vez del proyecto de producción — así "npm run dev" nunca lee ni
+// escribe datos reales. Se apagan con VITE_USE_EMULATORS=false en .env.local
+// (por ejemplo, para probar puntualmente contra producción).
+export const usandoEmuladores =
+  import.meta.env.DEV && import.meta.env.VITE_USE_EMULATORS !== "false";
+
 // App Check: prueba ante Firebase que las peticiones vienen de esta app y no de
 // un script ajeno que usa la configuración pública. Solo se activa si hay una
-// clave de reCAPTCHA Enterprise (ver README); sin ella la app funciona igual.
+// clave de reCAPTCHA Enterprise (ver README) y no se están usando emuladores
+// (App Check no aplica ahí); sin ella la app funciona igual.
 const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
-if (recaptchaKey) {
+if (recaptchaKey && !usandoEmuladores) {
   // En desarrollo (localhost) se usa un token de depuración: el navegador lo
   // imprime en consola y se registra en la consola de Firebase > App Check.
   if (import.meta.env.DEV) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
@@ -36,9 +45,17 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Cache local persistente: permite leer/escribir sin internet y sincroniza
-// automáticamente cuando la conexión vuelve.
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-  }),
-});
+// automáticamente cuando la conexión vuelve. No aplica contra el emulador
+// (sus datos ya son locales y se pierden al reiniciarlo si no se exportan).
+export const db = usandoEmuladores
+  ? initializeFirestore(app, {})
+  : initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+
+if (usandoEmuladores) {
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+}

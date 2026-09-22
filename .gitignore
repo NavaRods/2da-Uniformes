@@ -9,3 +9,4 @@ dist-ssr
 dist
 
 .firebase
+.emulator-data

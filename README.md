@@ -26,10 +26,35 @@ guardan localmente y se sincronizan solos cuando vuelve la conexión
 
 ## Desarrollo
 
+`npm run dev` habla por defecto con el **emulador local de Firebase**
+(Firestore + Auth), no con producción — así nunca se leen ni escriben datos
+reales mientras se prueba en el navegador. Se necesitan dos terminales:
+
 ```bash
+# Terminal 1: deja corriendo el emulador (guarda los datos entre reinicios)
+npm run emulators
+
+# Terminal 2 (la primera vez, o cuando el emulador arranque vacío):
+# crea un usuario Admin de prueba y una Unidad
+npm run seed:emulator tu-correo@ejemplo.com "2da Unidad"
+
+# Terminal 2: la app
 npm install
 npm run dev
 ```
+
+Abre `http://localhost:5173`, inicia sesión con el correo que usaste en
+`seed:emulator` — el emulador de Auth deja crear esa cuenta de prueba en el
+momento, sin que sea una cuenta real de Google. La consola del emulador
+(`http://localhost:4000`) deja ver y editar los datos a mano.
+
+`npm run emulators` guarda los datos en `./.emulator-data` al cerrarlo
+(`--export-on-exit`) y los recarga la próxima vez, así no hay que sembrar cada
+vez. Esa carpeta no se sube al repo (está en `.gitignore`).
+
+¿Necesitas probar puntualmente contra producción? Pon
+`VITE_USE_EMULATORS=false` en `.env.local` y usa las credenciales reales de
+`VITE_FIREBASE_*` — pero ten cuidado, ahí sí se leen y escriben datos reales.
 
 ## Producción
 
