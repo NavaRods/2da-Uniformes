@@ -15,7 +15,7 @@ import {
   usoDeUnidades,
 } from "../lib/unidades";
 import { contarElementosPorUnidad } from "../lib/elementos";
-import { useUnidades } from "../lib/fuentes";
+import { useUnidades, useGrados } from "../lib/fuentes";
 import { migrarDatosAnteriores } from "../lib/migracion";
 import { useAuth } from "../auth/AuthContext";
 
@@ -41,6 +41,7 @@ export default function Usuarios() {
 
   useEffect(() => listenUsuarios(setUsuarios), []);
   const unidades = useUnidades();
+  const grados = useGrados();
   // Solo se cuentan (no se descargan) los elementos de cada Unidad; se vuelve a
   // contar cuando cambia la lista de Unidades.
   const nombresUnidades = unidades.map((u) => u.nombre).join("|");
@@ -252,11 +253,14 @@ export default function Usuarios() {
 
         <div className="campo">
           <label>Grado</label>
-          <input
-            placeholder="Ej. Capitán, Instructor..."
-            value={form.grado}
-            onChange={(e) => setCampo("grado", e.target.value)}
-          />
+          <select value={form.grado} onChange={(e) => setCampo("grado", e.target.value)}>
+            <option value="">Sin grado</option>
+            {grados.map((g) => (
+              <option key={g.nombre} value={g.nombre}>
+                {g.nombre}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="campo">

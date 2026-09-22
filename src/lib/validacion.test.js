@@ -119,12 +119,9 @@ describe("validarElemento", () => {
     expect(errores.telefonos[1]).toBeTruthy();
   });
 
-  it("al crear exige contestar antecedentes y deporte; al editar no", () => {
+  it("antecedentes y deporte son opcionales, tanto al crear como al editar", () => {
     const sinRespuesta = { ...formValido, antecedentes: "", practicaDeporte: "" };
-    expect(Object.keys(validarElemento(sinRespuesta, GRADOS, "crear"))).toEqual(
-      expect.arrayContaining(["antecedentes", "practicaDeporte"])
-    );
-    expect(validarElemento(sinRespuesta, GRADOS, "editar")).toEqual({});
+    expect(validarElemento(sinRespuesta, GRADOS)).toEqual({});
   });
 
   it("si contesta Sí pide el detalle", () => {

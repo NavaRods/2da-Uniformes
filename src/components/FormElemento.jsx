@@ -51,11 +51,7 @@ export default function FormElemento({ elemento, onGuardado, onCancelar }) {
 
   const unidades = useUnidades();
 
-  const errores = validarElemento(
-    form,
-    grados.map((g) => g.nombre),
-    modo
-  );
+  const errores = validarElemento(form, grados.map((g) => g.nombre));
   const mostrar = (campo) => (intentado ? errores[campo] : "");
 
   function setCampo(campo, valor) {
@@ -285,7 +281,7 @@ export default function FormElemento({ elemento, onGuardado, onCancelar }) {
       </Campo>
 
       <PreguntaSiNo
-        etiqueta="Antecedentes: ¿ha estado en alguna institución deportiva o militar? *"
+        etiqueta="Antecedentes: ¿ha estado en alguna institución deportiva o militar?"
         valor={form.antecedentes}
         error={mostrar("antecedentes")}
         onChange={(v) => setCampo("antecedentes", v)}
@@ -296,7 +292,7 @@ export default function FormElemento({ elemento, onGuardado, onCancelar }) {
       />
 
       <PreguntaSiNo
-        etiqueta="¿Ha practicado o practica algún deporte? *"
+        etiqueta="¿Ha practicado o practica algún deporte?"
         valor={form.practicaDeporte}
         error={mostrar("practicaDeporte")}
         onChange={(v) => setCampo("practicaDeporte", v)}

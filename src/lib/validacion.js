@@ -72,10 +72,9 @@ export function validarFechaNacimiento(fecha, hoy = new Date()) {
   return "";
 }
 
-// Valida todo el formulario. `modo` es "crear" o "editar": al crear, las dos
-// preguntas de antecedentes deben contestarse; al editar (elementos viejos que
-// no las tienen) no se exigen.
-export function validarElemento(form, gradosValidos, modo = "crear") {
+// Valida todo el formulario. Antecedentes y deporte son opcionales; si se
+// contesta "Sí" a alguna, sí se pide el detalle.
+export function validarElemento(form, gradosValidos) {
   const errores = {};
 
   if (!form.unidad) errores.unidad = "Selecciona la Unidad.";
@@ -98,16 +97,10 @@ export function validarElemento(form, gradosValidos, modo = "crear") {
   const errTelefonos = form.telefonos.map((t) => validarTelefono(t));
   if (errTelefonos.some(Boolean)) errores.telefonos = errTelefonos;
 
-  if (modo === "crear" && !form.antecedentes) {
-    errores.antecedentes = "Indica si ha estado en alguna institución deportiva o militar.";
-  }
   if (form.antecedentes === "Sí" && !form.antecedentesDetalle.trim()) {
     errores.antecedentesDetalle = "Indica cuál institución.";
   }
 
-  if (modo === "crear" && !form.practicaDeporte) {
-    errores.practicaDeporte = "Indica si ha practicado o practica algún deporte.";
-  }
   if (form.practicaDeporte === "Sí" && !form.deporte.trim()) {
     errores.deporte = "Indica cuál deporte.";
   }
