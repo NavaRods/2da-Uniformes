@@ -1164,3 +1164,15 @@ th {
   background: var(--danger-soft);
   color: var(--danger);
 }
+
+/* Configuración > Catálogo: precio editable por fila. */
+.campo-precio {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+}
+
+.campo-precio input {
+  width: 90px;
+}

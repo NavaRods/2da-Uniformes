@@ -11,6 +11,8 @@ import {
   sembrarGradosPredeterminados,
 } from "../lib/gradosDb";
 import { CATEGORIAS, ordenarGrados } from "../lib/grados";
+import { editarProducto } from "../lib/catalogo";
+import { useCatalogo } from "../lib/fuentes";
 
 // Configuración (solo Admin): Unidades, grados militares y acceso al catálogo.
 export default function Configuracion() {
@@ -41,17 +43,90 @@ export default function Configuracion() {
 
       {tab === "unidades" && <SeccionUnidades />}
       {tab === "grados" && <SeccionGrados />}
-      {tab === "catalogo" && (
-        <div className="card">
-          <h2>Catálogo de productos</h2>
-          <p className="nota">
-            Agrega, edita o quita productos, precios, tallas y colores del catálogo de uniformes.
-          </p>
-          <Link to="/catalogo" className="btn-primary">
-            Abrir el catálogo
-          </Link>
-        </div>
+      {tab === "catalogo" && <SeccionCatalogo />}
+    </div>
+  );
+}
+
+function SeccionCatalogo() {
+  const productos = useCatalogo();
+  const [precios, setPrecios] = useState({}); // productoId -> texto en edición
+  const [guardandoId, setGuardandoId] = useState(null);
+  const [guardadoId, setGuardadoId] = useState(null);
+  const [error, setError] = useState("");
+
+  function precioDe(p) {
+    return precios[p.id] ?? String(p.precio);
+  }
+
+  function onCambiarPrecio(id, valor) {
+    setPrecios((ps) => ({ ...ps, [id]: valor }));
+    setGuardadoId(null);
+  }
+
+  async function onGuardarPrecio(p) {
+    const nuevo = Number(precioDe(p));
+    if (!(nuevo >= 0)) {
+      setError(`El precio de "${p.nombre}" no es válido.`);
+      return;
+    }
+    if (nuevo === p.precio) return;
+    setError("");
+    setGuardandoId(p.id);
+    try {
+      await editarProducto(p.id, { precio: nuevo });
+      setGuardadoId(p.id);
+    } catch {
+      setError(`No se pudo guardar "${p.nombre}". Verifica tu conexión e inténtalo de nuevo.`);
+    }
+    setGuardandoId(null);
+  }
+
+  return (
+    <div className="card">
+      <h2>Precios del catálogo</h2>
+      <p className="nota">
+        Cambia el precio de un producto y presiona Guardar. Para agregar o quitar productos,
+        tallas o colores, abre el catálogo completo.
+      </p>
+
+      {error && <p className="error">{error}</p>}
+
+      {productos.length === 0 && (
+        <p className="nota">Todavía no hay productos en el catálogo.</p>
       )}
+
+      <ul className="lista">
+        {productos.map((p) => {
+          const cambiado = Number(precioDe(p)) !== p.precio;
+          return (
+            <li key={p.id} className="fila-baja">
+              <span className="fila-lista">{p.nombre}</span>
+              <span className="campo-precio">
+                <span>$</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={precioDe(p)}
+                  onChange={(e) => onCambiarPrecio(p.id, e.target.value)}
+                />
+              </span>
+              <button
+                type="button"
+                className="btn-primary btn-small"
+                onClick={() => onGuardarPrecio(p)}
+                disabled={!cambiado || guardandoId === p.id}
+              >
+                {guardandoId === p.id ? "Guardando..." : guardadoId === p.id ? "Guardado ✅" : "Guardar"}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <Link to="/catalogo" className="btn-secondary">
+        Abrir el catálogo completo
+      </Link>
     </div>
   );
 }
