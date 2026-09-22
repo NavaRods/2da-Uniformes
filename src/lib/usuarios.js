@@ -1,9 +1,6 @@
 import {
   collection,
   getDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
   doc,
   onSnapshot,
   query,
@@ -12,6 +9,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { vigilar } from "./estadoFirestore";
+import { escribirConVersion } from "./versiones";
 
 export const ROLES = ["admin", "operador"];
 
@@ -23,12 +21,12 @@ export function normalizarCorreo(correo) {
 
 const usuariosRef = collection(db, "usuarios");
 
-export function listenUsuarios(callback) {
-  const q = query(usuariosRef, orderBy("nombre"));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }, vigilar());
-}
+// La lista completa (pantalla de Usuarios, solo Admin) se lee con
+// useUsuarios() de lib/fuentes.js, de la caché mientras no cambie su versión;
+// por eso las escrituras pasan por escribirConVersion. El perfil propio sí se
+// escucha en vivo (listenUsuario): así un cambio de rol o una suspensión
+// aplica de inmediato.
+export const consultaUsuarios = () => query(usuariosRef, orderBy("nombre"));
 
 export function listenUsuario(correo, callback, onError) {
   return onSnapshot(
@@ -44,22 +42,26 @@ export async function crearUsuario({ correo, nombre, rol, unidad, grado }) {
   if ((await getDoc(ref)).exists()) {
     throw Object.assign(new Error("El correo ya tiene acceso"), { code: "ya-existe" });
   }
-  return setDoc(ref, {
-    nombre: nombre || "",
-    rol,
-    unidad: rol === "admin" ? null : unidad,
-    grado: grado || "",
-    activo: true,
-    creadoEn: serverTimestamp(),
+  return escribirConVersion("usuarios", (lote) => {
+    lote.set(ref, {
+      nombre: nombre || "",
+      rol,
+      unidad: rol === "admin" ? null : unidad,
+      grado: grado || "",
+      activo: true,
+      creadoEn: serverTimestamp(),
+    });
   });
 }
 
 export async function editarUsuario(correo, { nombre, rol, unidad, grado }) {
-  return updateDoc(doc(db, "usuarios", normalizarCorreo(correo)), {
-    nombre: nombre || "",
-    rol,
-    unidad: rol === "admin" ? null : unidad,
-    grado: grado || "",
+  return escribirConVersion("usuarios", (lote) => {
+    lote.update(doc(db, "usuarios", normalizarCorreo(correo)), {
+      nombre: nombre || "",
+      rol,
+      unidad: rol === "admin" ? null : unidad,
+      grado: grado || "",
+    });
   });
 }
 
@@ -67,9 +69,13 @@ export async function editarUsuario(correo, { nombre, rol, unidad, grado }) {
 // de quién registró qué). Mientras activo sea false, las reglas de Firestore
 // le niegan el acceso aunque el documento siga existiendo.
 export async function cambiarActivo(correo, activo) {
-  return updateDoc(doc(db, "usuarios", normalizarCorreo(correo)), { activo });
+  return escribirConVersion("usuarios", (lote) => {
+    lote.update(doc(db, "usuarios", normalizarCorreo(correo)), { activo });
+  });
 }
 
 export async function eliminarUsuario(correo) {
-  return deleteDoc(doc(db, "usuarios", normalizarCorreo(correo)));
+  return escribirConVersion("usuarios", (lote) => {
+    lote.delete(doc(db, "usuarios", normalizarCorreo(correo)));
+  });
 }

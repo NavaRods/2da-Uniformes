@@ -14,6 +14,7 @@ vi.mock("firebase/firestore", () => ({
   getDoc: vi.fn(),
 }));
 vi.mock("../firebase", () => ({ db: {} }));
+vi.mock("./elementos", () => ({ marcaActualizacion: () => ({ actualizadoEn: "SERVER_TIMESTAMP" }) }));
 
 const {
   darDeBaja,
@@ -76,7 +77,7 @@ describe("marcarAsistencia", () => {
     await marcarAsistencia("2026-09-10", { id: "a", unidad: "2da Unidad" }, "baja");
     expect(batch.update).toHaveBeenCalledWith(
       { path: "elementos/a" },
-      { fechaBaja: "2026-09-10" }
+      { fechaBaja: "2026-09-10", actualizadoEn: "SERVER_TIMESTAMP" }
     );
   });
 
@@ -88,7 +89,7 @@ describe("marcarAsistencia", () => {
     );
     expect(batch.update).toHaveBeenCalledWith(
       { path: "elementos/a" },
-      { fechaBaja: "DELETE_FIELD" }
+      { fechaBaja: "DELETE_FIELD", actualizadoEn: "SERVER_TIMESTAMP" }
     );
   });
 
@@ -105,7 +106,10 @@ describe("marcarAsistencia", () => {
 describe("darDeBaja y reactivarElemento", () => {
   it("dar de baja marca el día y registra la fecha en el elemento", async () => {
     await darDeBaja({ id: "a", unidad: "2da Unidad" }, "2026-09-10");
-    expect(batch.update).toHaveBeenCalledWith({ path: "elementos/a" }, { fechaBaja: "2026-09-10" });
+    expect(batch.update).toHaveBeenCalledWith(
+      { path: "elementos/a" },
+      { fechaBaja: "2026-09-10", actualizadoEn: "SERVER_TIMESTAMP" }
+    );
     expect(batch.set).toHaveBeenCalledWith(
       { path: "asistencias/2026-09-10/porUnidad/2da Unidad" },
       { unidad: "2da Unidad", fecha: "2026-09-10", estados: { a: "baja" } },
@@ -115,7 +119,10 @@ describe("darDeBaja y reactivarElemento", () => {
 
   it("reactivar quita la baja del elemento y el estado que quedó ese día", async () => {
     await reactivarElemento({ id: "a", unidad: "2da Unidad", fechaBaja: "2026-09-10" });
-    expect(batch.update).toHaveBeenCalledWith({ path: "elementos/a" }, { fechaBaja: "DELETE_FIELD" });
+    expect(batch.update).toHaveBeenCalledWith(
+      { path: "elementos/a" },
+      { fechaBaja: "DELETE_FIELD", actualizadoEn: "SERVER_TIMESTAMP" }
+    );
     expect(batch.set).toHaveBeenCalledWith(
       { path: "asistencias/2026-09-10/porUnidad/2da Unidad" },
       { unidad: "2da Unidad", fecha: "2026-09-10", estados: { a: "DELETE_FIELD" } },

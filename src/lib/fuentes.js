@@ -1,8 +1,12 @@
 import { useMemo, useSyncExternalStore } from "react";
+import { getDocsFromCache } from "firebase/firestore";
 import { listenElementos } from "./elementos";
-import { listenCatalogo } from "./catalogo";
-import { listenUnidades } from "./unidades";
-import { listenGrados } from "./gradosDb";
+import { consultaCatalogo } from "./catalogo";
+import { consultaUnidades, compararUnidades } from "./unidades";
+import { consultaGrados } from "./gradosDb";
+import { consultaUsuarios } from "./usuarios";
+import { listenConfiguracion } from "./configuracion";
+import { cargarConVersion, claveVersion, listenVersiones } from "./versiones";
 import { GRADOS_PREDETERMINADOS, ordenarGrados } from "./grados";
 
 // Fuentes compartidas: cada colección se escucha UNA vez y todas las pantallas
@@ -54,9 +58,68 @@ export function crearFuente(escuchar, gracia = GRACIA_MS) {
   };
 }
 
-const catalogo = crearFuente(listenCatalogo);
-const unidades = crearFuente(listenUnidades);
-const grados = crearFuente(listenGrados);
+// Documento con la versión de cada colección versionada (ver lib/versiones.js).
+const versiones = crearFuente(listenVersiones);
+
+// Colección que casi nunca cambia: se entrega desde la caché del dispositivo y
+// solo se descarga del servidor cuando cambia su versión. Si el cambio lo hizo
+// este mismo dispositivo, su caché ya lo tiene: tampoco se descarga.
+export function escucharVersionada(coleccion, consulta, convertir, fuenteVersiones = versiones) {
+  return (callback) => {
+    let entregada; // versión ya entregada
+    let cambioPropio = false;
+    let turno = 0;
+
+    async function entregar(cargar) {
+      const mio = ++turno;
+      try {
+        const snap = await cargar();
+        if (mio === turno) callback(convertir(snap));
+      } catch {
+        // Sin servidor ni caché: se queda lo que ya se mostraba.
+      }
+    }
+
+    function revisar() {
+      const estado = fuenteVersiones.leer();
+      if (estado === SIN_DATOS) return;
+      const valor = estado.datos[coleccion];
+      if (estado.pendiente && valor === null) {
+        // Cambio de este dispositivo aún sin confirmar: se muestra de la caché.
+        cambioPropio = true;
+        entregar(() => getDocsFromCache(consulta()));
+        return;
+      }
+      const version = claveVersion(valor);
+      if (version === entregada) {
+        cambioPropio = false;
+        return;
+      }
+      entregada = version;
+      const propio = cambioPropio;
+      cambioPropio = false;
+      entregar(() => cargarConVersion(coleccion, consulta(), version, { propio }));
+    }
+
+    const dejar = fuenteVersiones.suscribir(revisar);
+    revisar();
+    return () => {
+      turno += 1;
+      dejar();
+    };
+  };
+}
+
+const lista = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+const catalogo = crearFuente(escucharVersionada("catalogo", consultaCatalogo, lista));
+const unidades = crearFuente(
+  escucharVersionada("unidades", consultaUnidades, (snap) => lista(snap).sort(compararUnidades))
+);
+const grados = crearFuente(escucharVersionada("grados", consultaGrados, lista));
+const usuarios = crearFuente(escucharVersionada("usuarios", consultaUsuarios, lista));
+// Un solo documento: se escucha una vez para todas las pantallas que lo usan.
+const configuracion = crearFuente((cb) => listenConfiguracion(cb, () => cb({})));
 const elementosPorUnidad = new Map();
 
 function fuenteElementos(unidad) {
@@ -71,6 +134,9 @@ export function reiniciarFuentes() {
   catalogo.detener();
   unidades.detener();
   grados.detener();
+  usuarios.detener();
+  configuracion.detener();
+  versiones.detener();
   elementosPorUnidad.forEach((f) => f.detener());
   elementosPorUnidad.clear();
 }
@@ -87,6 +153,20 @@ export const useElementos = (unidad) => useFuente(unidad ? fuenteElementos(unida
 export const useCatalogo = () => useFuente(catalogo);
 // `activo` en false evita suscribirse (p. ej. un Operador no necesita la lista).
 export const useUnidades = (activo = true) => useFuente(activo ? unidades : null);
+// Todas las cuentas con acceso (pantalla de Usuarios, solo Admin).
+export const useUsuarios = () => useFuente(usuarios);
+
+// Ajustes compartidos (número de WhatsApp). null mientras carga.
+export function useConfiguracion() {
+  const datos = useFuente(configuracion);
+  return datos === SIN_DATOS ? null : datos;
+}
+
+// Grados tal como están guardados; null mientras cargan (Configuración).
+export function useGradosGuardados() {
+  const guardados = useFuente(grados);
+  return guardados === SIN_DATOS ? null : guardados;
+}
 
 // Grados militares, de mayor a menor jerarquía. Mientras la colección de
 // Firestore esté vacía se usan los predeterminados.

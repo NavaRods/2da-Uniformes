@@ -7,6 +7,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { vigilar, vigilarEscritura } from "./estadoFirestore";
+import { marcaActualizacion } from "./elementos";
 
 // Un doc por día y Unidad: asistencias/{fecha}/porUnidad/{unidad}, con
 // { unidad, fecha, estados: { elementoId: estado, ... } }. Separado así (en
@@ -70,10 +71,13 @@ export async function marcarAsistencia(fecha, elemento, estado) {
     { merge: true }
   );
   if (estado === "baja") {
-    batch.update(doc(db, "elementos", elemento.id), { fechaBaja: fecha });
+    batch.update(doc(db, "elementos", elemento.id), { fechaBaja: fecha, ...marcaActualizacion() });
   } else if (elemento.fechaBaja && elemento.fechaBaja <= fecha) {
     // Se marcó otro estado en/después de la baja: se reactiva al elemento.
-    batch.update(doc(db, "elementos", elemento.id), { fechaBaja: deleteField() });
+    batch.update(doc(db, "elementos", elemento.id), {
+      fechaBaja: deleteField(),
+      ...marcaActualizacion(),
+    });
   }
   await vigilarEscritura(batch.commit());
 }
@@ -89,7 +93,10 @@ export async function darDeBaja(elemento, fecha = fechaLocal()) {
 export async function reactivarElemento(elemento) {
   mesesCerrados.delete(`${elemento.unidad}|${(elemento.fechaBaja || "").slice(0, 7)}`);
   const batch = writeBatch(db);
-  batch.update(doc(db, "elementos", elemento.id), { fechaBaja: deleteField() });
+  batch.update(doc(db, "elementos", elemento.id), {
+    fechaBaja: deleteField(),
+    ...marcaActualizacion(),
+  });
   if (elemento.fechaBaja) {
     batch.set(
       diaUnidadRef(elemento.fechaBaja, elemento.unidad),

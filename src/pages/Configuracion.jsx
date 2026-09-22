@@ -1,18 +1,17 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { crearUnidad, eliminarUnidad, listenUnidades } from "../lib/unidades";
+import { crearUnidad, eliminarUnidad } from "../lib/unidades";
 import {
   contarDocs,
   crearGrado,
   editarGrado,
   eliminarGrado,
   intercambiarRango,
-  listenGrados,
   sembrarGradosPredeterminados,
 } from "../lib/gradosDb";
 import { CATEGORIAS, ordenarGrados } from "../lib/grados";
 import { editarProducto } from "../lib/catalogo";
-import { useCatalogo } from "../lib/fuentes";
+import { useCatalogo, useGradosGuardados, useUnidades } from "../lib/fuentes";
 
 // Configuración (solo Admin): Unidades, grados militares y acceso al catálogo.
 export default function Configuracion() {
@@ -132,12 +131,10 @@ function SeccionCatalogo() {
 }
 
 function SeccionUnidades() {
-  const [unidades, setUnidades] = useState([]);
+  const unidades = useUnidades();
   const [nombre, setNombre] = useState("");
   const [error, setError] = useState("");
   const [ocupado, setOcupado] = useState(false);
-
-  useEffect(() => listenUnidades(setUnidades), []);
 
   async function onCrear(e) {
     e.preventDefault();
@@ -221,13 +218,11 @@ function SeccionUnidades() {
 }
 
 function SeccionGrados() {
-  const [grados, setGrados] = useState(null); // null = cargando
+  const grados = useGradosGuardados(); // null = cargando
   const [nuevo, setNuevo] = useState({ nombre: "", categoria: CATEGORIAS[CATEGORIAS.length - 1] });
   const [editando, setEditando] = useState(null); // { id, nombre, categoria, original }
   const [error, setError] = useState("");
   const [ocupado, setOcupado] = useState(false);
-
-  useEffect(() => listenGrados(setGrados), []);
 
   async function ejecutar(accion, mensajeError) {
     setOcupado(true);

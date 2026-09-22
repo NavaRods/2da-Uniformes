@@ -14,6 +14,8 @@ import {
   writeBatch,
   collection,
   deleteField,
+  serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 
 let env;
@@ -83,6 +85,17 @@ beforeEach(async () => {
 const pedidoRef = (db, id = "ped1") => doc(db, "elementos", "el1", "pedidos", id);
 const abonoRef = (db, id, pedido = "ped1") =>
   doc(db, "elementos", "el1", "pedidos", pedido, "abonos", id);
+
+// Escritura en una colección versionada junto con su versión en
+// meta/versiones, como hace escribirConVersion en la app.
+function conVersion(db, coleccion, escribir) {
+  const batch = writeBatch(db);
+  escribir(batch);
+  batch.set(doc(db, "meta", "versiones"), { [coleccion]: serverTimestamp() }, { merge: true });
+  return batch.commit();
+}
+
+const ahora = () => ({ actualizadoEn: serverTimestamp() });
 
 // Abono + nuevo saldo en un solo batch, como hace registrarAbono en la app.
 async function abonar(db, { monto, saldoNuevo, id = "ab1", pedido = "ped1" }) {
@@ -260,7 +273,7 @@ describe("mensualidades", () => {
 
 describe("elementos: campos nuevos y bajas", () => {
   const nuevoElemento = (db, extra = {}) =>
-    setDoc(doc(collection(db, "elementos")), { ...elementoA, ...extra });
+    setDoc(doc(collection(db, "elementos")), { ...elementoA, ...ahora(), ...extra });
 
   it("acepta grado militar, número de orden y antecedentes", async () => {
     await assertSucceeds(
@@ -293,12 +306,31 @@ describe("elementos: campos nuevos y bajas", () => {
 
   it("un Operador puede dar de baja y reactivar a un elemento de su Unidad", async () => {
     const ref = doc(como(OP_A), "elementos", "el1");
-    await assertSucceeds(updateDoc(ref, { fechaBaja: "2026-09-10" }));
-    await assertSucceeds(updateDoc(ref, { fechaBaja: deleteField() }));
+    await assertSucceeds(updateDoc(ref, { fechaBaja: "2026-09-10", ...ahora() }));
+    await assertSucceeds(updateDoc(ref, { fechaBaja: deleteField(), ...ahora() }));
   });
 
   it("un Operador de otra Unidad NO puede dar de baja", async () => {
-    await assertFails(updateDoc(doc(como(OP_B), "elementos", "el1"), { fechaBaja: "2026-09-10" }));
+    await assertFails(
+      updateDoc(doc(como(OP_B), "elementos", "el1"), { fechaBaja: "2026-09-10", ...ahora() })
+    );
+  });
+});
+
+describe("elementos: actualizadoEn (sincronización por cambios)", () => {
+  it("crear o editar sin actualizadoEn se rechaza", async () => {
+    await assertFails(setDoc(doc(collection(como(OP_A), "elementos")), elementoA));
+    await assertFails(updateDoc(doc(como(OP_A), "elementos", "el1"), { nombre: "Luis R." }));
+  });
+
+  it("actualizadoEn debe ser la hora del servidor, no una elegida", async () => {
+    const vieja = Timestamp.fromMillis(Date.UTC(2020, 0, 1));
+    await assertFails(
+      updateDoc(doc(como(OP_A), "elementos", "el1"), { nombre: "Luis R.", actualizadoEn: vieja })
+    );
+    await assertSucceeds(
+      updateDoc(doc(como(OP_A), "elementos", "el1"), { nombre: "Luis R.", ...ahora() })
+    );
   });
 });
 
@@ -310,26 +342,71 @@ describe("grados militares", () => {
     await assertSucceeds(getDoc(doc(como(OP_A), "grados", "g1")));
   });
 
+  const grados = (db, escribir) => conVersion(db, "grados", escribir);
+
   it("solo un Admin los crea, edita y borra", async () => {
-    await assertFails(setDoc(doc(como(OP_A), "grados", "g1"), grado));
-    await assertSucceeds(setDoc(doc(como(ADMIN), "grados", "g1"), grado));
-    await assertFails(updateDoc(doc(como(OP_A), "grados", "g1"), { rango: 9 }));
-    await assertSucceeds(updateDoc(doc(como(ADMIN), "grados", "g1"), { rango: 9 }));
-    await assertFails(deleteDoc(doc(como(OP_A), "grados", "g1")));
-    await assertSucceeds(deleteDoc(doc(como(ADMIN), "grados", "g1")));
+    const op = como(OP_A);
+    const admin = como(ADMIN);
+    await assertFails(grados(op, (b) => b.set(doc(op, "grados", "g1"), grado)));
+    await assertSucceeds(grados(admin, (b) => b.set(doc(admin, "grados", "g1"), grado)));
+    await assertFails(grados(op, (b) => b.update(doc(op, "grados", "g1"), { rango: 9 })));
+    await assertSucceeds(grados(admin, (b) => b.update(doc(admin, "grados", "g1"), { rango: 9 })));
+    await assertFails(grados(op, (b) => b.delete(doc(op, "grados", "g1"))));
+    await assertSucceeds(grados(admin, (b) => b.delete(doc(admin, "grados", "g1"))));
+  });
+
+  it("sin actualizar su versión, ni un Admin puede cambiarlos", async () => {
+    await assertFails(setDoc(doc(como(ADMIN), "grados", "g1"), grado));
   });
 
   it("rechaza una categoría que no existe en el Estado de Fuerza", async () => {
-    await assertFails(setDoc(doc(como(ADMIN), "grados", "g2"), { ...grado, categoria: "Generales" }));
+    const admin = como(ADMIN);
+    await assertFails(
+      grados(admin, (b) => b.set(doc(admin, "grados", "g2"), { ...grado, categoria: "Generales" }))
+    );
   });
 });
 
 describe("unidades (Configuración)", () => {
   it("solo un Admin crea y borra Unidades; todos las leen", async () => {
-    await assertFails(setDoc(doc(como(OP_A), "unidades", "u1"), { nombre: "3ra Unidad" }));
-    await assertSucceeds(setDoc(doc(como(ADMIN), "unidades", "u1"), { nombre: "3ra Unidad" }));
-    await assertSucceeds(getDoc(doc(como(OP_A), "unidades", "u1")));
-    await assertFails(deleteDoc(doc(como(OP_A), "unidades", "u1")));
-    await assertSucceeds(deleteDoc(doc(como(ADMIN), "unidades", "u1")));
+    const op = como(OP_A);
+    const admin = como(ADMIN);
+    const unidades = (db, escribir) => conVersion(db, "unidades", escribir);
+    const nueva = { nombre: "3ra Unidad" };
+    await assertFails(unidades(op, (b) => b.set(doc(op, "unidades", "u1"), nueva)));
+    await assertSucceeds(unidades(admin, (b) => b.set(doc(admin, "unidades", "u1"), nueva)));
+    await assertSucceeds(getDoc(doc(op, "unidades", "u1")));
+    await assertFails(unidades(op, (b) => b.delete(doc(op, "unidades", "u1"))));
+    await assertFails(deleteDoc(doc(admin, "unidades", "u1"))); // sin versión
+    await assertSucceeds(unidades(admin, (b) => b.delete(doc(admin, "unidades", "u1"))));
+  });
+});
+
+describe("versiones (meta/versiones)", () => {
+  const versiones = (db) => doc(db, "meta", "versiones");
+
+  it("todos los usuarios con acceso la leen; sin acceso no", async () => {
+    await assertSucceeds(getDoc(versiones(como(OP_A))));
+    await assertFails(getDoc(versiones(como("intruso@x.com"))));
+  });
+
+  it("un Operador no la cambia", async () => {
+    await assertFails(setDoc(versiones(como(OP_A)), { catalogo: serverTimestamp() }));
+  });
+
+  it("solo acepta la hora del servidor y colecciones conocidas", async () => {
+    const admin = como(ADMIN);
+    await assertSucceeds(setDoc(versiones(admin), { catalogo: serverTimestamp() }));
+    await assertFails(setDoc(versiones(admin), { catalogo: Timestamp.fromMillis(0) }, { merge: true }));
+    await assertFails(setDoc(versiones(admin), { otra: serverTimestamp() }, { merge: true }));
+  });
+
+  it("dar de alta un usuario exige actualizar la versión de usuarios", async () => {
+    const admin = como(ADMIN);
+    const nuevo = { rol: "operador", unidad: "A", nombre: "Carla" };
+    await assertFails(setDoc(doc(admin, "usuarios", "carla@club.mx"), nuevo));
+    await assertSucceeds(
+      conVersion(admin, "usuarios", (b) => b.set(doc(admin, "usuarios", "carla@club.mx"), nuevo))
+    );
   });
 });

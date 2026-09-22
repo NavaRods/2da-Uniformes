@@ -39,6 +39,32 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/elementos/$(elementoId)).data.unidad;
     }
 
+    // --- Versiones de colecciones (ver src/lib/versiones.js) ---
+    // Catálogo, grados, Unidades y usuarios se leen de la caché de cada
+    // dispositivo mientras no cambie su versión en meta/versiones. Por eso
+    // toda escritura en ellas debe actualizar su versión en el mismo lote:
+    // si no, los demás dispositivos nunca se enterarían del cambio.
+    function versionActualizada(coleccion) {
+      return getAfter(/databases/$(database)/documents/meta/versiones).data.get(coleccion, null) == request.time;
+    }
+
+    function versionesCambiadas() {
+      return resource == null
+        ? request.resource.data.keys().toSet()
+        : request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    match /meta/versiones {
+      allow read: if esUsuarioAutorizado();
+      // Solo se escribe la hora del servidor de la colección que cambió.
+      allow create, update: if esAdmin() &&
+        request.resource.data.keys().hasOnly(["catalogo", "grados", "unidades", "usuarios"]) &&
+        (!("catalogo" in versionesCambiadas()) || request.resource.data.catalogo == request.time) &&
+        (!("grados" in versionesCambiadas()) || request.resource.data.grados == request.time) &&
+        (!("unidades" in versionesCambiadas()) || request.resource.data.unidades == request.time) &&
+        (!("usuarios" in versionesCambiadas()) || request.resource.data.usuarios == request.time);
+    }
+
     // --- Usuarios (cuentas con acceso) ---
     // "grado" es solo una etiqueta libre (no afecta permisos). "activo"
     // permite suspender el acceso de alguien sin borrar su cuenta.
@@ -53,14 +79,16 @@ service cloud.firestore {
 
     match /usuarios/{email} {
       allow read: if esAdmin() || (request.auth != null && request.auth.token.email.lower() == email);
-      allow create: if esAdmin() && usuarioValido(request.resource.data);
+      allow create: if esAdmin() && usuarioValido(request.resource.data) && versionActualizada("usuarios");
       // Un Admin no puede quitarse a sí mismo el acceso ni el rol (ni
       // borrarse): así la app nunca se queda sin Admin. Otro Admin sí puede.
       allow update: if esAdmin() && usuarioValido(request.resource.data) &&
+        versionActualizada("usuarios") &&
         (request.auth.token.email.lower() != email ||
           (request.resource.data.rol == "admin" &&
            request.resource.data.get("activo", true) == true));
-      allow delete: if esAdmin() && request.auth.token.email.lower() != email;
+      allow delete: if esAdmin() && request.auth.token.email.lower() != email &&
+        versionActualizada("usuarios");
     }
 
     // --- Unidades (lista abierta, la administra un Admin) ---
@@ -71,8 +99,9 @@ service cloud.firestore {
 
     match /unidades/{unidadId} {
       allow read: if esUsuarioAutorizado();
-      allow create, update: if esAdmin() && unidadListaValida(request.resource.data);
-      allow delete: if esAdmin();
+      allow create, update: if esAdmin() && unidadListaValida(request.resource.data) &&
+        versionActualizada("unidades");
+      allow delete: if esAdmin() && versionActualizada("unidades");
     }
 
     // --- Grados militares ---
@@ -88,8 +117,9 @@ service cloud.firestore {
 
     match /grados/{gradoId} {
       allow read: if esUsuarioAutorizado();
-      allow create, update: if esAdmin() && gradoValido(request.resource.data);
-      allow delete: if esAdmin();
+      allow create, update: if esAdmin() && gradoValido(request.resource.data) &&
+        versionActualizada("grados");
+      allow delete: if esAdmin() && versionActualizada("grados");
     }
 
     // --- Elementos ---
@@ -102,8 +132,12 @@ service cloud.firestore {
         // elementos antiguos que todavía lo tengan guardado.
         "pagaInscripcion", "documentacionEntregada", "fechaBaja", "creadoEn",
         "numeroOrden", "gradoMilitar", "antecedentes", "antecedentesDetalle",
-        "practicaDeporte", "deporte"
+        "practicaDeporte", "deporte", "actualizadoEn"
       ]) &&
+      // Hora del servidor de esta escritura: la sincronización por cambios
+      // (src/lib/elementos.js) pide solo los elementos con actualizadoEn
+      // reciente, así que ninguna escritura puede omitirla.
+      datos.actualizadoEn == request.time &&
       datos.nombre is string && datos.nombre.size() > 0 &&
       datos.unidad is string && datos.unidad.size() > 0 &&
       (!("grupo" in datos) || datos.grupo is string) &&
@@ -274,8 +308,9 @@ service cloud.firestore {
 
     match /catalogo/{productoId} {
       allow read: if esUsuarioAutorizado();
-      allow create, update: if esAdmin() && productoValido(request.resource.data);
-      allow delete: if esAdmin();
+      allow create, update: if esAdmin() && productoValido(request.resource.data) &&
+        versionActualizada("catalogo");
+      allow delete: if esAdmin() && versionActualizada("catalogo");
     }
 
     // --- Asistencia diaria ---

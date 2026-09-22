@@ -1,11 +1,25 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-vi.mock("./elementos", () => ({ listenElementos: vi.fn() }));
-vi.mock("./catalogo", () => ({ listenCatalogo: vi.fn() }));
-vi.mock("./unidades", () => ({ listenUnidades: vi.fn() }));
-vi.mock("react", () => ({ useSyncExternalStore: vi.fn() }));
+const getDocsFromCache = vi.fn(async () => ({ desde: "cache" }));
+const cargarConVersion = vi.fn(async () => ({ desde: "version" }));
 
-const { crearFuente } = await import("./fuentes");
+vi.mock("firebase/firestore", () => ({
+  getDocsFromCache: (...args) => getDocsFromCache(...args),
+}));
+vi.mock("./elementos", () => ({ listenElementos: vi.fn() }));
+vi.mock("./catalogo", () => ({ consultaCatalogo: vi.fn() }));
+vi.mock("./unidades", () => ({ consultaUnidades: vi.fn(), compararUnidades: vi.fn() }));
+vi.mock("./gradosDb", () => ({ consultaGrados: vi.fn() }));
+vi.mock("./usuarios", () => ({ consultaUsuarios: vi.fn() }));
+vi.mock("./configuracion", () => ({ listenConfiguracion: vi.fn() }));
+vi.mock("./versiones", () => ({
+  cargarConVersion: (...args) => cargarConVersion(...args),
+  claveVersion: (valor) => valor?.ms ?? 0,
+  listenVersiones: vi.fn(),
+}));
+vi.mock("react", () => ({ useSyncExternalStore: vi.fn(), useMemo: vi.fn() }));
+
+const { crearFuente, escucharVersionada } = await import("./fuentes");
 
 function fuenteFalsa() {
   const cerrar = vi.fn();
@@ -75,5 +89,73 @@ describe("crearFuente", () => {
     fuente.detener();
     expect(f.cerrar).toHaveBeenCalledTimes(1);
     expect(fuente.leer()).toEqual([]);
+  });
+});
+
+describe("escucharVersionada", () => {
+  // Fuente de versiones falsa: `emitir` simula un cambio en meta/versiones.
+  function preparar() {
+    const versiones = fuenteFalsa();
+    const fuenteVersiones = crearFuente(versiones.escuchar, 1000);
+    const consulta = vi.fn(() => "CONSULTA");
+    const recibido = vi.fn();
+    const cerrar = escucharVersionada(
+      "catalogo",
+      consulta,
+      (snap) => snap.desde,
+      fuenteVersiones
+    )(recibido);
+    return { emitir: versiones.emitir, recibido, cerrar };
+  }
+  const esperar = () => Promise.resolve().then(() => Promise.resolve());
+
+  beforeEach(() => {
+    getDocsFromCache.mockClear();
+    cargarConVersion.mockClear();
+  });
+
+  it("no carga nada hasta conocer las versiones", () => {
+    preparar();
+    expect(cargarConVersion).not.toHaveBeenCalled();
+  });
+
+  it("carga según la versión y entrega los datos convertidos", async () => {
+    const { emitir, recibido } = preparar();
+    emitir({ datos: { catalogo: { ms: 7 } }, pendiente: false });
+    await esperar();
+    expect(cargarConVersion).toHaveBeenCalledWith("catalogo", "CONSULTA", 7, { propio: false });
+    expect(recibido).toHaveBeenCalledWith("version");
+  });
+
+  it("si cambia otra colección, esta no se vuelve a cargar", async () => {
+    const { emitir } = preparar();
+    emitir({ datos: { catalogo: { ms: 7 } }, pendiente: false });
+    emitir({ datos: { catalogo: { ms: 7 }, grados: { ms: 9 } }, pendiente: false });
+    await esperar();
+    expect(cargarConVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it("un cambio propio se muestra de la caché y, al confirmarse, no se descarga", async () => {
+    const { emitir, recibido } = preparar();
+    emitir({ datos: { catalogo: { ms: 7 } }, pendiente: false });
+    await esperar();
+
+    // Pendiente de confirmar: la versión de esta colección llega en null.
+    emitir({ datos: { catalogo: null }, pendiente: true });
+    await esperar();
+    expect(getDocsFromCache).toHaveBeenCalledWith("CONSULTA");
+    expect(recibido).toHaveBeenLastCalledWith("cache");
+
+    emitir({ datos: { catalogo: { ms: 8 } }, pendiente: false });
+    await esperar();
+    expect(cargarConVersion).toHaveBeenLastCalledWith("catalogo", "CONSULTA", 8, { propio: true });
+  });
+
+  it("un cambio pendiente de otra colección no afecta a esta", async () => {
+    const { emitir } = preparar();
+    emitir({ datos: { catalogo: { ms: 7 } }, pendiente: false });
+    emitir({ datos: { catalogo: { ms: 7 }, grados: null }, pendiente: true });
+    await esperar();
+    expect(getDocsFromCache).not.toHaveBeenCalled();
   });
 });

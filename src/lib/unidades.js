@@ -1,16 +1,12 @@
 import {
   collection,
-  addDoc,
-  deleteDoc,
   doc,
-  onSnapshot,
   query,
   orderBy,
   serverTimestamp,
-  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { vigilar } from "./estadoFirestore";
+import { escribirConVersion } from "./versiones";
 
 const unidadesRef = collection(db, "unidades");
 
@@ -19,12 +15,9 @@ export function compararUnidades(a, b) {
   return a.nombre.localeCompare(b.nombre, "es", { numeric: true });
 }
 
-export function listenUnidades(callback) {
-  const q = query(unidadesRef, orderBy("nombre"));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort(compararUnidades));
-  }, vigilar());
-}
+// Se leen con useUnidades() de lib/fuentes.js (de la caché mientras no cambie
+// su versión); por eso las escrituras pasan por escribirConVersion.
+export const consultaUnidades = () => query(unidadesRef, orderBy("nombre"));
 
 // Misma Unidad aunque cambien mayúsculas o espacios ("1A" = "1a ").
 export function existeUnidad(unidades, nombre) {
@@ -33,23 +26,26 @@ export function existeUnidad(unidades, nombre) {
 }
 
 export async function crearUnidad(nombre) {
-  return addDoc(unidadesRef, {
-    nombre: nombre.trim(),
-    creadoEn: serverTimestamp(),
+  return escribirConVersion("unidades", (lote) => {
+    const ref = doc(unidadesRef);
+    lote.set(ref, { nombre: nombre.trim(), creadoEn: serverTimestamp() });
+    return ref;
   });
 }
 
 export async function eliminarUnidad(unidadId) {
-  return deleteDoc(doc(db, "unidades", unidadId));
+  return escribirConVersion("unidades", (lote) => {
+    lote.delete(doc(db, "unidades", unidadId));
+  });
 }
 
 // Quita varias Unidades de la lista de una sola vez. No toca elementos ni
 // usuarios: siguen guardados con el nombre de su Unidad.
 export async function eliminarUnidades(unidadIds) {
   for (let i = 0; i < unidadIds.length; i += 400) {
-    const lote = writeBatch(db);
-    unidadIds.slice(i, i + 400).forEach((id) => lote.delete(doc(db, "unidades", id)));
-    await lote.commit();
+    await escribirConVersion("unidades", (lote) => {
+      unidadIds.slice(i, i + 400).forEach((id) => lote.delete(doc(db, "unidades", id)));
+    });
   }
 }
 

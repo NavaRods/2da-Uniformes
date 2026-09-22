@@ -1,18 +1,13 @@
 import {
   collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
   doc,
-  onSnapshot,
   query,
   orderBy,
   arrayUnion,
   getDocs,
-  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
-import { vigilar } from "./estadoFirestore";
+import { escribirConVersion } from "./versiones";
 
 const catalogoRef = collection(db, "catalogo");
 
@@ -66,52 +61,70 @@ const CATALOGO_INICIAL = [
   },
 ];
 
-export function listenCatalogo(callback) {
-  const q = query(catalogoRef, orderBy("nombre"));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }, vigilar());
-}
+// El catálogo se lee con useCatalogo() de lib/fuentes.js, que lo toma de la
+// caché del dispositivo mientras no cambie su versión (ver lib/versiones.js).
+// Por eso toda escritura aquí pasa por escribirConVersion.
+export const consultaCatalogo = () => query(catalogoRef, orderBy("nombre"));
 
 export async function sembrarCatalogoInicial() {
   const existentes = await getDocs(catalogoRef);
   if (!existentes.empty) return false; // ya hay catálogo, no duplicar
-  await Promise.all(CATALOGO_INICIAL.map((p) => addDoc(catalogoRef, p)));
+  await escribirConVersion("catalogo", (lote) => {
+    CATALOGO_INICIAL.forEach((p) => lote.set(doc(catalogoRef), p));
+  });
   return true;
 }
 
-export async function crearProducto({ nombre, precio, tallaTipo, tallas, colores }) {
-  return addDoc(catalogoRef, {
+function datosProducto({ nombre, precio, tallaTipo, tallas, colores }) {
+  return {
     nombre,
     precio: Number(precio) || 0,
     tallaTipo,
     tallas: tallas || [],
     colores: colores || [],
-  });
+  };
 }
 
 export async function editarProducto(productoId, cambios) {
-  return updateDoc(doc(db, "catalogo", productoId), cambios);
+  return escribirConVersion("catalogo", (lote) => {
+    lote.update(doc(db, "catalogo", productoId), cambios);
+  });
 }
 
-export async function agregarTalla(productoId, talla) {
-  return updateDoc(doc(db, "catalogo", productoId), {
-    tallas: arrayUnion(talla),
+// Guarda de una vez los cambios pendientes de la pantalla de Catálogo
+// (productos nuevos, precios y tallas): una sola escritura y un solo cambio de
+// versión, en lugar de uno por cambio (cada uno haría que todos los
+// dispositivos volvieran a descargar el catálogo).
+export async function guardarCambiosCatalogo(cambios) {
+  if (cambios.length === 0) return;
+  return escribirConVersion("catalogo", (lote) => {
+    for (const cambio of cambios) {
+      if (cambio.tipo === "nuevo") {
+        lote.set(doc(catalogoRef), datosProducto(cambio.datos));
+        continue;
+      }
+      const ref = doc(db, "catalogo", cambio.productoId);
+      if (cambio.precioNuevo !== null) lote.update(ref, { precio: cambio.precioNuevo });
+      if (cambio.tallasNuevas.length > 0) {
+        lote.update(ref, { tallas: arrayUnion(...cambio.tallasNuevas) });
+      }
+    }
   });
 }
 
 export async function eliminarProducto(productoId) {
-  return deleteDoc(doc(db, "catalogo", productoId));
+  return escribirConVersion("catalogo", (lote) => {
+    lote.delete(doc(db, "catalogo", productoId));
+  });
 }
 
 // Borra TODOS los productos del catálogo (no toca pedidos ya creados con
-// elementos, solo el catálogo de referencia). Usa un batch para que quede
-// como una sola operación.
+// elementos, solo el catálogo de referencia). Todo en un solo lote.
 export async function vaciarCatalogo() {
   const snap = await getDocs(catalogoRef);
   if (snap.empty) return 0;
-  const batch = writeBatch(db);
-  snap.docs.forEach((d) => batch.delete(d.ref));
-  await batch.commit();
+  await escribirConVersion("catalogo", (lote) => {
+    snap.docs.forEach((d) => lote.delete(d.ref));
+  });
   return snap.size;
 }

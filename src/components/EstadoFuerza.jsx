@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { estadoDeFuerza, CATEGORIAS } from "../lib/grados";
 import { estaDeBaja, normalizarEstado } from "../lib/asistencia";
-import { guardarNumeroWhatsapp, listenConfiguracion } from "../lib/configuracion";
+import { guardarNumeroWhatsapp } from "../lib/configuracion";
+import { useConfiguracion } from "../lib/fuentes";
 import { etiquetaDia } from "../lib/relacionPagos";
 import { linkWhatsapp, mensajeEstadoFuerza, normalizarTelefono, telefonoValido } from "../lib/whatsapp";
 
@@ -14,14 +15,13 @@ import { linkWhatsapp, mensajeEstadoFuerza, normalizarTelefono, telefonoValido }
 // y se puede volver a generar cuando se quiera.
 export default function EstadoFuerza({ elementos, asistencia, grados, unidad, fecha }) {
   const [novedades, setNovedades] = useState("");
-  const [config, setConfig] = useState(null);
+  const config = useConfiguracion();
   const [generado, setGenerado] = useState(false);
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const [numeroEditado, setNumeroEditado] = useState("");
   const [errorConfig, setErrorConfig] = useState("");
   const [guardandoConfig, setGuardandoConfig] = useState(false);
 
-  useEffect(() => listenConfiguracion(setConfig, () => setConfig({})), []);
   // Cambiar de día o de Unidad vuelve a pedir generarlo: no se debe arrastrar
   // un Estado de Fuerza que ya no corresponde a lo que se está viendo.
   useEffect(() => setGenerado(false), [unidad, fecha]);

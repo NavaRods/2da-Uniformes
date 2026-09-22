@@ -108,6 +108,51 @@ npm run test:rules
 
 Corre esto cada vez que cambies `firestore.rules`.
 
+## Consumo de Firestore (plan gratuito)
+
+La app está hecha para gastar el mínimo de lecturas del plan Spark (50,000
+al día):
+
+- **Catálogo, grados, Unidades y usuarios** se guardan en la caché del
+  dispositivo y solo se vuelven a descargar cuando un Admin los cambia. Cada
+  colección tiene una "versión" en el documento `meta/versiones`; abrir la app
+  cuesta 1 lectura (ese documento) en lugar de una por producto, grado, etc.
+  Por seguridad se vuelven a descargar cada 3 días aunque no cambien.
+- **Elementos**: solo se descargan los que cambiaron desde la última vez
+  (campo `actualizadoEn`). La lista completa de una Unidad se vuelve a
+  descargar una vez por semana por dispositivo.
+- **Número de WhatsApp**: una sola lectura compartida por todas las pantallas.
+- Los conteos (elementos por Unidad, uso de un grado) usan consultas de
+  conteo: 1 lectura por cada 1,000 documentos.
+
+Las reglas de Firestore obligan a que cada escritura mantenga esto al día (la
+versión y `actualizadoEn`). **Si editas catálogo, grados, Unidades o usuarios
+a mano desde la consola de Firebase**, los dispositivos lo verán en máximo 3
+días; para que lo vean de inmediato, cambia también el campo de esa colección
+en `meta/versiones` (tipo *timestamp*, con la hora actual).
+
+### Orden para publicar este cambio
+
+La app nueva y las reglas nuevas van juntas (la app vieja no escribe
+`actualizadoEn` y las reglas viejas no la aceptan), pero el índice debe existir
+antes:
+
+```bash
+firebase deploy --only firestore:indexes
+```
+
+Espera a que el índice `elementos (unidad, actualizadoEn)` aparezca como
+"Habilitado" en Firebase Console > Firestore > Índices, y después:
+
+```bash
+npm run deploy
+```
+
+Hazlo en un horario sin uso (no durante el pase de lista). Quien tenga la app
+abierta con la versión anterior debe recargarla; hasta entonces sus cambios en
+elementos serán rechazados.
+
+
 ## Seguridad
 
 - **Reglas de Firestore** (`firestore.rules`): roles Admin/Operador, datos

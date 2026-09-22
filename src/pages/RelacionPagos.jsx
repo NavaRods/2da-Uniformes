@@ -4,7 +4,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { listenAbonosDelDia, listenCambiosPendientes } from "../lib/pedidos";
 import { listenCuotasDelDia } from "../lib/cuotas";
-import { guardarNumeroWhatsapp, listenConfiguracion } from "../lib/configuracion";
+import { guardarNumeroWhatsapp } from "../lib/configuracion";
+import { useConfiguracion } from "../lib/fuentes";
 import {
   linkWhatsapp,
   mensajeRelacionDia,
@@ -43,7 +44,7 @@ export default function RelacionPagos() {
   const [filtro, setFiltro] = useState("todos");
   const [cargado, setCargado] = useState({ abonos: false, cuotas: false });
   const [error, setError] = useState("");
-  const [config, setConfig] = useState(null);
+  const config = useConfiguracion();
   const [mostrarConfig, setMostrarConfig] = useState(false);
   const [numeroEditado, setNumeroEditado] = useState("");
   const [errorConfig, setErrorConfig] = useState("");
@@ -102,7 +103,6 @@ export default function RelacionPagos() {
     () => listenCambiosPendientes(setCambiosPendientes, undefined, unidadFiltro),
     [unidadFiltro]
   );
-  useEffect(() => listenConfiguracion(setConfig, () => setConfig({})), []);
 
   // Los pagos nuevos traen el nombre y el artículo copiados y no leen nada.
   // Solo los antiguos consultan al elemento/pedido, y esas lecturas se

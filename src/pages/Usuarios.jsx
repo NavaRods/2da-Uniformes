@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  listenUsuarios,
   crearUsuario,
   editarUsuario,
   eliminarUsuario,
@@ -15,7 +14,7 @@ import {
   usoDeUnidades,
 } from "../lib/unidades";
 import { contarElementosPorUnidad } from "../lib/elementos";
-import { useUnidades, useGrados } from "../lib/fuentes";
+import { useUnidades, useGrados, useUsuarios } from "../lib/fuentes";
 import { migrarDatosAnteriores } from "../lib/migracion";
 import { useAuth } from "../auth/AuthContext";
 
@@ -26,7 +25,6 @@ export default function Usuarios() {
   const yo = (user?.email || "").toLowerCase();
   const [migrando, setMigrando] = useState(false);
   const [resultadoMigracion, setResultadoMigracion] = useState("");
-  const [usuarios, setUsuarios] = useState([]);
   const [conteos, setConteos] = useState({}); // elementos por Unidad; null = no se pudo contar
   const [nombreUnidad, setNombreUnidad] = useState("");
   const [errorUnidades, setErrorUnidades] = useState("");
@@ -39,7 +37,7 @@ export default function Usuarios() {
   const [nuevaUnidadForm, setNuevaUnidadForm] = useState("");
   const [creandoUnidad, setCreandoUnidad] = useState(false);
 
-  useEffect(() => listenUsuarios(setUsuarios), []);
+  const usuarios = useUsuarios();
   const unidades = useUnidades();
   const grados = useGrados();
   // Solo se cuentan (no se descargan) los elementos de cada Unidad; se vuelve a

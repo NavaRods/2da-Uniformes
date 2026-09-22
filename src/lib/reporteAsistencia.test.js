@@ -8,6 +8,7 @@ vi.mock("firebase/firestore", () => ({
   getDoc: vi.fn(),
 }));
 vi.mock("../firebase", () => ({ db: {} }));
+vi.mock("./elementos", () => ({ marcaActualizacion: () => ({}) }));
 
 const { cabecerasReporte, filasReporte, filaComoLista, LEYENDA } = await import("./reporteAsistencia");
 const { GRADOS_PREDETERMINADOS } = await import("./grados");

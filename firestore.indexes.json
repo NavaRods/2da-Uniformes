@@ -15,6 +15,20 @@
       ]
     },
     {
+      "collectionGroup": "elementos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "unidad",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "actualizadoEn",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "porUnidad",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

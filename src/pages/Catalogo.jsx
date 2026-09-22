@@ -1,9 +1,7 @@
 import { useState } from "react";
 import {
   sembrarCatalogoInicial,
-  crearProducto,
-  editarProducto,
-  agregarTalla,
+  guardarCambiosCatalogo,
   eliminarProducto,
   vaciarCatalogo,
   TALLA_TIPO,
@@ -170,21 +168,13 @@ export default function Catalogo() {
 
   async function guardarTodo() {
     setGuardando(true);
-    for (const cambio of pendientes) {
-      if (cambio.tipo === "nuevo") {
-        await crearProducto(cambio.datos);
-      } else {
-        if (cambio.precioNuevo !== null) {
-          await editarProducto(cambio.productoId, { precio: cambio.precioNuevo });
-        }
-        for (const talla of cambio.tallasNuevas) {
-          await agregarTalla(cambio.productoId, talla);
-        }
-      }
+    try {
+      await guardarCambiosCatalogo(pendientes);
+      setPendientes([]);
+      setGuardado(true);
+    } finally {
+      setGuardando(false);
     }
-    setPendientes([]);
-    setGuardando(false);
-    setGuardado(true);
   }
 
   function descripcionCambio(c) {

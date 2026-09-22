@@ -1,18 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const lote = { delete: vi.fn(), commit: vi.fn(async () => {}) };
+// escribirConVersion suma la versión y confirma el lote (ver lib/versiones.js).
+const escribirConVersion = vi.fn(async (coleccion, escribir) => {
+  escribir(lote);
+  await lote.commit();
+});
+vi.mock("./versiones", () => ({
+  escribirConVersion: (...args) => escribirConVersion(...args),
+}));
 const doc = vi.fn((...args) => ({ __type: "doc", path: args.slice(1) }));
 
 vi.mock("firebase/firestore", () => ({
   collection: vi.fn(() => ({ __type: "collection" })),
-  addDoc: vi.fn(),
-  deleteDoc: vi.fn(),
   doc: (...args) => doc(...args),
-  onSnapshot: vi.fn(),
   query: vi.fn((ref) => ref),
   orderBy: vi.fn(),
   serverTimestamp: () => "SERVER_TIMESTAMP",
-  writeBatch: () => lote,
 }));
 vi.mock("../firebase", () => ({ db: {} }));
 
@@ -21,6 +25,7 @@ const { compararUnidades, existeUnidad, eliminarUnidades, usoDeUnidades } = awai
 beforeEach(() => {
   lote.delete.mockClear();
   lote.commit.mockClear();
+  escribirConVersion.mockClear();
 });
 
 describe("orden y duplicados", () => {
@@ -42,6 +47,7 @@ describe("eliminarUnidades", () => {
     expect(lote.delete).toHaveBeenCalledTimes(3);
     expect(lote.delete).toHaveBeenCalledWith({ __type: "doc", path: ["unidades", "b"] });
     expect(lote.commit).toHaveBeenCalledTimes(1);
+    expect(escribirConVersion).toHaveBeenCalledWith("unidades", expect.any(Function));
   });
 
   it("parte en varios lotes cuando son muchas", async () => {
