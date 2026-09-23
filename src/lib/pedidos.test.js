@@ -18,10 +18,10 @@ const doc = vi.fn((...args) =>
     ? conId({ __type: "doc", path: [...args[0].path, "abono-nuevo"] }, "abono-nuevo")
     : conId({ __type: "doc", path: args.slice(1) }, args[args.length - 1])
 );
-const query = vi.fn((ref) => ref);
+const query = vi.fn((...args) => ({ __type: "query", args }));
 const orderBy = vi.fn();
 const where = vi.fn();
-const onSnapshot = vi.fn();
+const onSnapshot = vi.fn(() => () => {});
 const getDocs = vi.fn(async () => ({ docs: [] }));
 const batch = {
   delete: vi.fn(),
@@ -59,12 +59,16 @@ const {
   marcarCambioPendiente,
   registrarAbono,
   eliminarPedido,
+  listenPedidosPendientes,
 } = await import("./pedidos");
 
 beforeEach(() => {
   addDoc.mockClear();
   updateDoc.mockClear();
   increment.mockClear();
+  onSnapshot.mockClear();
+  where.mockClear();
+  query.mockClear();
 });
 
 describe("crearPedido", () => {
@@ -219,5 +223,62 @@ describe("eliminarPedido", () => {
     });
     expect(batch.delete).toHaveBeenCalledTimes(3);
     expect(batch.commit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("listenPedidosPendientes", () => {
+  function snap(docs) {
+    return {
+      docs: docs.map(({ id, elementoId, ...datos }) => ({
+        id,
+        ref: {
+          parent: { parent: { id: elementoId } },
+        },
+        data: () => datos,
+      })),
+    };
+  }
+
+  it("une deuda y entrega por elemento/pedido sin duplicar", () => {
+    const recibidos = [];
+    listenPedidosPendientes((d) => recibidos.push(d), undefined, undefined);
+    expect(onSnapshot).toHaveBeenCalledTimes(2);
+    const handlers = onSnapshot.mock.calls.map(([, alSnap]) => alSnap);
+
+    handlers[0](
+      snap([
+        { id: "p1", elementoId: "e1", articulo: "Playera", saldoPendiente: 100, entregado: false },
+        { id: "p2", elementoId: "e2", articulo: "Gorra", saldoPendiente: 50, entregado: true },
+      ])
+    );
+    // Aún falta la segunda consulta: no se emite nada todavía.
+    expect(recibidos).toHaveLength(0);
+
+    handlers[1](
+      snap([
+        { id: "p1", elementoId: "e1", articulo: "Playera", saldoPendiente: 100, entregado: false },
+        { id: "p3", elementoId: "e2", articulo: "Pantalón", saldoPendiente: 0, entregado: false },
+      ])
+    );
+
+    const ultima = recibidos.at(-1);
+    expect(ultima).toHaveLength(3);
+    const claves = ultima.map((p) => `${p.elementoId}/${p.id}`).sort();
+    expect(claves).toEqual(["e1/p1", "e2/p2", "e2/p3"]);
+  });
+
+  it("al cerrar no emite más cambios de las consultas", () => {
+    const recibidos = [];
+    const cerrar = listenPedidosPendientes((d) => recibidos.push(d), undefined, undefined);
+    const handlers = onSnapshot.mock.calls.map(([, alSnap]) => alSnap);
+    onSnapshot.mockClear();
+
+    handlers[0](snap([]));
+    handlers[1](snap([]));
+    expect(recibidos).toHaveLength(1);
+
+    cerrar();
+    handlers[0](snap([{ id: "p9", elementoId: "e9", saldoPendiente: 1, entregado: false }]));
+    expect(recibidos).toHaveLength(1);
   });
 });

@@ -20,9 +20,11 @@ import {
 
 let env;
 
+const SUPER = "super@club.mx";
 const ADMIN = "admin@club.mx";
-const OP_A = "ana@club.mx"; // Operador de la Unidad A
-const OP_B = "beto@club.mx"; // Operador de la Unidad B
+const EM = "coronel@club.mx"; // Estado Mayor: consulta todas, no escribe
+const OP_A = "ana@club.mx"; // Responsable de la Unidad A
+const OP_B = "beto@club.mx"; // Responsable de la Unidad B
 
 // Contexto autenticado con Google y correo verificado.
 const como = (correo) =>
@@ -56,9 +58,11 @@ beforeEach(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
+    await setDoc(doc(db, "usuarios", SUPER), { rol: "superadmin", unidad: null });
     await setDoc(doc(db, "usuarios", ADMIN), { rol: "admin", unidad: null });
-    await setDoc(doc(db, "usuarios", OP_A), { rol: "operador", unidad: "A" });
-    await setDoc(doc(db, "usuarios", OP_B), { rol: "operador", unidad: "B" });
+    await setDoc(doc(db, "usuarios", EM), { rol: "estado_mayor", unidad: null });
+    await setDoc(doc(db, "usuarios", OP_A), { rol: "responsable", unidad: "A" });
+    await setDoc(doc(db, "usuarios", OP_B), { rol: "responsable", unidad: "B" });
     await setDoc(doc(db, "elementos", "el1"), elementoA);
     // Pedido de 300 con un abono de 100 ya registrado (saldo 200).
     await setDoc(doc(db, "elementos", "el1", "pedidos", "ped1"), {
@@ -131,6 +135,56 @@ describe("acceso y unidades", () => {
 
   it("un correo no dado de alta en usuarios queda fuera", async () => {
     await assertFails(getDoc(doc(como("intruso@x.com"), "elementos", "el1")));
+  });
+});
+
+describe("Estado Mayor: consulta todas las Unidades, no escribe en ninguna", () => {
+  it("lee elementos y pedidos de cualquier Unidad", async () => {
+    const db = como(EM);
+    await assertSucceeds(getDoc(doc(db, "elementos", "el1")));
+    await assertSucceeds(getDoc(pedidoRef(db)));
+  });
+
+  it("no puede dar de alta un elemento ni abonar, aunque vea la Unidad", async () => {
+    const db = como(EM);
+    await assertFails(setDoc(doc(db, "elementos", "el2"), { ...elementoA, ...ahora() }));
+    await assertFails(abonar(db, { monto: 50, saldoNuevo: 150 }));
+  });
+});
+
+describe("Super Admin: nadie lo toca desde la app", () => {
+  it("un Admin no puede editar ni borrar la cuenta de un Super Admin", async () => {
+    const admin = como(ADMIN);
+    await assertFails(
+      conVersion(admin, "usuarios", (b) =>
+        b.update(doc(admin, "usuarios", SUPER), { nombre: "Otro nombre" })
+      )
+    );
+    await assertFails(
+      conVersion(admin, "usuarios", (b) => b.delete(doc(admin, "usuarios", SUPER)))
+    );
+  });
+
+  it("no se puede crear ni editar un usuario con rol superadmin desde la app", async () => {
+    const admin = como(ADMIN);
+    await assertFails(
+      conVersion(admin, "usuarios", (b) =>
+        b.set(doc(admin, "usuarios", "nuevo@club.mx"), { rol: "superadmin", unidad: null })
+      )
+    );
+    await assertFails(
+      conVersion(admin, "usuarios", (b) =>
+        b.update(doc(admin, "usuarios", OP_A), { rol: "superadmin" })
+      )
+    );
+  });
+
+  it("un Super Admin administra igual que un Admin (Unidades, todas las Unidades)", async () => {
+    const superAdmin = como(SUPER);
+    await assertSucceeds(getDoc(doc(superAdmin, "elementos", "el1")));
+    await assertSucceeds(
+      conVersion(superAdmin, "unidades", (b) => b.set(doc(superAdmin, "unidades", "u1"), { nombre: "C" }))
+    );
   });
 });
 
@@ -403,7 +457,7 @@ describe("versiones (meta/versiones)", () => {
 
   it("dar de alta un usuario exige actualizar la versión de usuarios", async () => {
     const admin = como(ADMIN);
-    const nuevo = { rol: "operador", unidad: "A", nombre: "Carla" };
+    const nuevo = { rol: "responsable", unidad: "A", nombre: "Carla" };
     await assertFails(setDoc(doc(admin, "usuarios", "carla@club.mx"), nuevo));
     await assertSucceeds(
       conVersion(admin, "usuarios", (b) => b.set(doc(admin, "usuarios", "carla@club.mx"), nuevo))

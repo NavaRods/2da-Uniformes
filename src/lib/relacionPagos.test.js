@@ -2,9 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   filaDeAbono,
   filaDeCuota,
+  filaDePedido,
   pedidoDeAbono,
   ordenarPorHora,
   resumenDia,
+  resumenPendientes,
+  pendientesPorElemento,
   moverDia,
 } from "./relacionPagos";
 
@@ -121,5 +124,106 @@ describe("pedidoDeAbono", () => {
 
   it("un abono antiguo (sin datos copiados) devuelve null", () => {
     expect(pedidoDeAbono({ id: "a", monto: 5 })).toBeNull();
+  });
+});
+
+describe("filaDePedido", () => {
+  it("calcula lo pagado y marca deuda y falta de entrega", () => {
+    const f = filaDePedido({
+      id: "p1",
+      elementoId: "e1",
+      articulo: "Playera — M",
+      precioTotal: 300,
+      saldoPendiente: 120,
+      entregado: false,
+    });
+    expect(f).toMatchObject({
+      id: "e1/p1",
+      pagado: 180,
+      saldoPendiente: 120,
+      liquidado: false,
+      debeDinero: true,
+      faltaEntregar: true,
+    });
+  });
+
+  it("un pedido liquidado y entregado no queda con deuda", () => {
+    const f = filaDePedido({
+      id: "p2",
+      elementoId: "e1",
+      articulo: "Gorra",
+      precioTotal: 50,
+      saldoPendiente: 0,
+      entregado: true,
+    });
+    expect(f).toMatchObject({
+      pagado: 50,
+      saldoPendiente: 0,
+      liquidado: true,
+      debeDinero: false,
+      faltaEntregar: false,
+    });
+  });
+
+  it("un saldo negativo (pago de más) no sube el pagado arriba del precio", () => {
+    const f = filaDePedido({
+      id: "p3",
+      elementoId: "e1",
+      articulo: "Corbata",
+      precioTotal: 40,
+      saldoPendiente: -10,
+      entregado: true,
+    });
+    expect(f.pagado).toBe(40);
+    expect(f.saldoPendiente).toBe(0);
+    expect(f.liquidado).toBe(true);
+  });
+});
+
+describe("resumenPendientes y pendientesPorElemento", () => {
+  const filas = [
+    filaDePedido({
+      id: "p1", elementoId: "e1", elementoNombre: "Ana",
+      articulo: "Playera", precioTotal: 300, saldoPendiente: 120, entregado: false,
+    }),
+    filaDePedido({
+      id: "p2", elementoId: "e1", elementoNombre: "Ana",
+      articulo: "Gorra", precioTotal: 50, saldoPendiente: 0, entregado: true,
+    }),
+    filaDePedido({
+      id: "p3", elementoId: "e2", elementoNombre: "Luis",
+      articulo: "Pantalón", precioTotal: 200, saldoPendiente: 200, entregado: false,
+    }),
+  ];
+
+  it("suma lo por cobrar, lo pagado y cuenta deudas y entregas", () => {
+    expect(resumenPendientes(filas)).toMatchObject({
+      pedidos: 3,
+      elementos: 2,
+      porCobrar: 320,
+      pagado: 230,
+      valorTotal: 550,
+      conDeuda: 2,
+      sinEntregar: 2,
+    });
+  });
+
+  it("agrupa por elemento y ordena primero a quien más debe", () => {
+    const grupos = pendientesPorElemento(filas);
+    expect(grupos.map((g) => g.elementoId)).toEqual(["e2", "e1"]);
+    expect(grupos[1]).toMatchObject({
+      elementoNombre: "Ana",
+      porCobrar: 120,
+      pagado: 230,
+      valorTotal: 350,
+      conDeuda: 1,
+      sinEntregar: 1,
+    });
+    expect(grupos[1].pedidos).toHaveLength(2);
+  });
+
+  it("una lista vacía da ceros y ningún grupo", () => {
+    expect(resumenPendientes([])).toMatchObject({ pedidos: 0, porCobrar: 0, conDeuda: 0 });
+    expect(pendientesPorElemento([])).toEqual([]);
   });
 });

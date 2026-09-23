@@ -2,9 +2,9 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { reactivarElemento } from "../lib/asistencia";
 
-// Elementos dados de baja. No se pueden eliminar: solo reactivar. Se usa en
-// Elementos y en Asistencia.
-export default function ListaBajas({ bajas }) {
+// Elementos dados de baja. No se pueden eliminar: solo reactivar (salvo con
+// `soloLectura`, para el rol Estado Mayor). Se usa en Elementos y en Asistencia.
+export default function ListaBajas({ bajas, soloLectura = false }) {
   const [error, setError] = useState("");
 
   async function onReactivar(el) {
@@ -32,9 +32,11 @@ export default function ListaBajas({ bajas }) {
               </span>
               <span className="tag tag-baja">Baja {el.fechaBaja}</span>
             </Link>
-            <button type="button" className="btn-secondary btn-small" onClick={() => onReactivar(el)}>
-              Reactivar
-            </button>
+            {!soloLectura && (
+              <button type="button" className="btn-secondary btn-small" onClick={() => onReactivar(el)}>
+                Reactivar
+              </button>
+            )}
           </li>
         ))}
       </ul>

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { esAdmin } from "../lib/roles";
 
 const SECCIONES = [
   ["/elementos", "👥", "Elementos", "Perfiles, datos y documentación"],
@@ -16,7 +17,7 @@ const SECCIONES_ADMIN = [
 
 export default function Inicio() {
   const { perfil } = useAuth();
-  const secciones = perfil?.rol === "admin" ? [...SECCIONES, ...SECCIONES_ADMIN] : SECCIONES;
+  const secciones = esAdmin(perfil) ? [...SECCIONES, ...SECCIONES_ADMIN] : SECCIONES;
   return (
     <div className="page">
       <h1>Uniformes</h1>

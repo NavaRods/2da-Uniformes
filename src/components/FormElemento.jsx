@@ -2,6 +2,7 @@ import { useState } from "react";
 import { crearElemento, actualizarElemento } from "../lib/elementos";
 import { useUnidades, useGrados } from "../lib/fuentes";
 import { useAuth } from "../auth/AuthContext";
+import { veTodasLasUnidades } from "../lib/roles";
 import { TURNOS, FUENTES } from "../lib/opciones";
 import { fechaLocalISO } from "../lib/format";
 import {
@@ -41,10 +42,10 @@ const FORM_VACIO = {
 // `elemento` edita el existente. Se cierra con "Cancelar", con la ✕ o con Esc.
 export default function FormElemento({ elemento, onGuardado, onCancelar }) {
   const { perfil } = useAuth();
-  const esAdmin = perfil?.rol === "admin";
+  const puedeElegirUnidad = veTodasLasUnidades(perfil);
   const modo = elemento ? "editar" : "crear";
   const grados = useGrados();
-  const [form, setForm] = useState(() => formInicial(elemento, esAdmin, perfil));
+  const [form, setForm] = useState(() => formInicial(elemento, puedeElegirUnidad, perfil));
   const [intentado, setIntentado] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -101,7 +102,7 @@ export default function FormElemento({ elemento, onGuardado, onCancelar }) {
         await actualizarElemento(elemento.id, datos);
       } else {
         await crearElemento(datos);
-        setForm(formInicial(null, esAdmin, perfil));
+        setForm(formInicial(null, puedeElegirUnidad, perfil));
         setIntentado(false);
       }
       onGuardado?.();
@@ -138,7 +139,7 @@ export default function FormElemento({ elemento, onGuardado, onCancelar }) {
         <select
           value={form.unidad}
           onChange={(e) => setCampo("unidad", e.target.value)}
-          disabled={!esAdmin}
+          disabled={!puedeElegirUnidad}
         >
           <option value="">Selecciona...</option>
           {unidades.map((u) => (
@@ -347,8 +348,8 @@ export default function FormElemento({ elemento, onGuardado, onCancelar }) {
   );
 }
 
-function formInicial(elemento, esAdmin, perfil) {
-  if (!elemento) return { ...FORM_VACIO, unidad: esAdmin ? "" : perfil?.unidad || "" };
+function formInicial(elemento, puedeElegirUnidad, perfil) {
+  if (!elemento) return { ...FORM_VACIO, unidad: puedeElegirUnidad ? "" : perfil?.unidad || "" };
   return {
     ...FORM_VACIO,
     unidad: elemento.unidad || "",

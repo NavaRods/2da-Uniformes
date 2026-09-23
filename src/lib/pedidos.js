@@ -204,3 +204,59 @@ export function listenCambiosPendientes(callback, onError, unidad) {
     );
   }, vigilar(onError));
 }
+
+// Pedidos pendientes (sin importar el día): los que aún deben dinero y los
+// que todavía no se entregan. Son dos consultas (Firestore no mezcla
+// desigualdad y booleano en una sola) y se unen por elemento/pedido para no
+// repetir los que cumplen las dos condiciones.
+export function listenPedidosPendientes(callback, onError, unidad) {
+  const ref = collectionGroup(db, "pedidos");
+  const filtros = unidad ? [where("unidad", "==", unidad)] : [];
+  const deuda = new Map();
+  const entrega = new Map();
+  let listos = 0;
+  let cerrado = false;
+
+  const clave = (d) => `${d.ref.parent.parent.id}/${d.id}`;
+  const mapear = (d) => ({
+    id: d.id,
+    elementoId: d.ref.parent.parent.id,
+    ...d.data(),
+  });
+
+  function emitir() {
+    if (cerrado || listos < 2) return;
+    const vistos = new Map();
+    for (const par of [deuda, entrega]) {
+      for (const [k, v] of par) vistos.set(k, v);
+    }
+    callback([...vistos.values()]);
+  }
+
+  const cerrarDeuda = onSnapshot(
+    query(ref, ...filtros, where("saldoPendiente", ">", 0)),
+    (snap) => {
+      deuda.clear();
+      snap.docs.forEach((d) => deuda.set(clave(d), mapear(d)));
+      listos |= 1;
+      emitir();
+    },
+    vigilar(onError)
+  );
+  const cerrarEntrega = onSnapshot(
+    query(ref, ...filtros, where("entregado", "==", false)),
+    (snap) => {
+      entrega.clear();
+      snap.docs.forEach((d) => entrega.set(clave(d), mapear(d)));
+      listos |= 2;
+      emitir();
+    },
+    vigilar(onError)
+  );
+
+  return () => {
+    cerrado = true;
+    cerrarDeuda();
+    cerrarEntrega();
+  };
+}

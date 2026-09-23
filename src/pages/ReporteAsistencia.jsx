@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useElementos, useUnidades, useGrados } from "../lib/fuentes";
 import { useAuth } from "../auth/AuthContext";
+import { veTodasLasUnidades } from "../lib/roles";
 import { domingosDelMes, fechaLocal, obtenerAsistenciasDias } from "../lib/asistencia";
 import {
   LEYENDA,
@@ -17,16 +18,17 @@ function mesActual() {
 
 export default function ReporteAsistencia() {
   const { perfil } = useAuth();
-  const esAdmin = perfil?.rol === "admin";
+  const puedeElegirUnidad = veTodasLasUnidades(perfil);
   const grados = useGrados();
-  const [unidad, setUnidad] = useState(esAdmin ? "" : perfil?.unidad || "");
+  // Responsable/Instructor traen su Unidad precargada y fija; el resto elige.
+  const [unidad, setUnidad] = useState(puedeElegirUnidad ? "" : perfil?.unidad || "");
   const [mes, setMes] = useState(mesActual());
   const [reporte, setReporte] = useState(null); // { unidad, mes, domingos, filas }
   const [cargando, setCargando] = useState(false);
   const [generandoPdf, setGenerandoPdf] = useState(false);
   const [error, setError] = useState("");
 
-  const unidades = useUnidades(esAdmin);
+  const unidades = useUnidades(puedeElegirUnidad);
   // Sin Unidad elegida (Admin) no se carga nada: antes leía todos los elementos.
   const elementos = useElementos(unidad);
 
@@ -65,7 +67,7 @@ export default function ReporteAsistencia() {
     <div className="page">
       <h1>Reporte mensual de asistencia</h1>
 
-      {esAdmin && (
+      {puedeElegirUnidad && (
         <div className="campo">
           <label>Unidad</label>
           <select

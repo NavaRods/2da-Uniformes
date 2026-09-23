@@ -127,3 +127,81 @@ export function etiquetaDia(yyyyMmDd) {
     year: "numeric",
   });
 }
+
+// --- Pedidos pendientes (vista "Por cobrar / entregar") ---
+// Un pedido está pendiente si aún debe dinero (saldo > 0) o si todavía no se
+// entrega. La consulta trae los dos casos; aquí se convierten en filas
+// comparables y se agregan por elemento.
+
+export function filaDePedido(pedido) {
+  const precio = Number(pedido.precioTotal) || 0;
+  const saldoCrudo = Number(pedido.saldoPendiente) || 0;
+  const liquidado = saldoCrudo <= 0;
+  // Si el saldo se pasó de 0 (pago de más), lo abonado no supera el precio.
+  const pagado = liquidado ? precio : Math.max(precio - saldoCrudo, 0);
+  return {
+    id: `${pedido.elementoId}/${pedido.id}`,
+    elementoId: pedido.elementoId,
+    pedidoId: pedido.id,
+    elementoNombre: pedido.elementoNombre || "",
+    articulo: pedido.articulo || "?",
+    productoNombre: pedido.productoNombre || pedido.articulo || "?",
+    talla: pedido.talla || "",
+    color: pedido.color || "",
+    precioTotal: precio,
+    pagado,
+    saldoPendiente: liquidado ? 0 : saldoCrudo,
+    liquidado,
+    entregado: !!pedido.entregado,
+    cambioPendiente: !!pedido.cambioPendiente,
+    debeDinero: !liquidado,
+    faltaEntregar: !pedido.entregado,
+    unidad: pedido.unidad || "",
+  };
+}
+
+export function resumenPendientes(filas) {
+  const suma = (f) => filas.reduce((s, x) => s + f(x), 0);
+  return {
+    pedidos: filas.length,
+    elementos: new Set(filas.map((f) => f.elementoId)).size,
+    porCobrar: suma((f) => f.saldoPendiente),
+    pagado: suma((f) => f.pagado),
+    valorTotal: suma((f) => f.precioTotal),
+    conDeuda: filas.filter((f) => f.debeDinero).length,
+    sinEntregar: filas.filter((f) => f.faltaEntregar).length,
+  };
+}
+
+// Agrupa los pedidos pendientes por elemento (quién debe / a quién le falta
+// la pieza), con el total de esa persona y el peor estado entre sus pedidos.
+export function pendientesPorElemento(filas) {
+  const grupos = new Map();
+  for (const f of filas) {
+    let g = grupos.get(f.elementoId);
+    if (!g) {
+      g = {
+        elementoId: f.elementoId,
+        elementoNombre: f.elementoNombre,
+        pedidos: [],
+        porCobrar: 0,
+        pagado: 0,
+        valorTotal: 0,
+        conDeuda: 0,
+        sinEntregar: 0,
+      };
+      grupos.set(f.elementoId, g);
+    }
+    if (!g.elementoNombre && f.elementoNombre) g.elementoNombre = f.elementoNombre;
+    g.pedidos.push(f);
+    g.porCobrar += f.saldoPendiente;
+    g.pagado += f.pagado;
+    g.valorTotal += f.precioTotal;
+    if (f.debeDinero) g.conDeuda += 1;
+    if (f.faltaEntregar) g.sinEntregar += 1;
+  }
+  return [...grupos.values()].sort(
+    (a, b) => b.porCobrar - a.porCobrar || (b.sinEntregar - a.sinEntregar) ||
+      (a.elementoNombre || "").localeCompare(b.elementoNombre || "", "es")
+  );
+}

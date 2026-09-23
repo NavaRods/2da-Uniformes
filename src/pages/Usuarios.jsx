@@ -17,8 +17,9 @@ import { contarElementosPorUnidad } from "../lib/elementos";
 import { useUnidades, useGrados, useUsuarios } from "../lib/fuentes";
 import { migrarDatosAnteriores } from "../lib/migracion";
 import { useAuth } from "../auth/AuthContext";
+import { etiquetaRol, requiereUnidad } from "../lib/roles";
 
-const FORM_VACIO = { correo: "", nombre: "", rol: "operador", unidad: "", grado: "" };
+const FORM_VACIO = { correo: "", nombre: "", rol: "responsable", unidad: "", grado: "" };
 
 export default function Usuarios() {
   const { user } = useAuth();
@@ -37,7 +38,8 @@ export default function Usuarios() {
   const [nuevaUnidadForm, setNuevaUnidadForm] = useState("");
   const [creandoUnidad, setCreandoUnidad] = useState(false);
 
-  const usuarios = useUsuarios();
+  // El Super Admin no aparece en la lista: no se administra desde aquí.
+  const usuarios = useUsuarios().filter((u) => u.rol !== "superadmin");
   const unidades = useUnidades();
   const grados = useGrados();
   // Solo se cuentan (no se descargan) los elementos de cada Unidad; se vuelve a
@@ -78,7 +80,7 @@ export default function Usuarios() {
   async function onSubmit(e) {
     e.preventDefault();
     if (!form.correo.trim()) return;
-    if (form.rol === "operador" && !form.unidad) {
+    if (requiereUnidad(form.rol) && !form.unidad) {
       setError("Selecciona una Unidad para este usuario.");
       return;
     }
@@ -266,18 +268,18 @@ export default function Usuarios() {
           <select value={form.rol} onChange={(e) => setCampo("rol", e.target.value)}>
             {ROLES.map((r) => (
               <option key={r} value={r}>
-                {r === "admin" ? "Admin" : "Operador"}
+                {etiquetaRol(r)}
               </option>
             ))}
           </select>
         </div>
 
         <div className="campo">
-          <label>Unidad {form.rol === "operador" && "*"}</label>
+          <label>Unidad {requiereUnidad(form.rol) && "*"}</label>
           <select
             value={form.unidad}
             onChange={(e) => setCampo("unidad", e.target.value)}
-            disabled={form.rol === "admin"}
+            disabled={!requiereUnidad(form.rol)}
           >
             <option value="">Selecciona...</option>
             {unidades.map((u) => (
@@ -286,8 +288,8 @@ export default function Usuarios() {
               </option>
             ))}
           </select>
-          {form.rol === "admin" && <p className="nota">Un Admin ve todas las Unidades.</p>}
-          {form.rol === "operador" && !mostrarNuevaUnidad && (
+          {!requiereUnidad(form.rol) && <p className="nota">Este rol ve todas las Unidades, no una fija.</p>}
+          {requiereUnidad(form.rol) && !mostrarNuevaUnidad && (
             <button
               type="button"
               className="btn-secondary btn-small"
@@ -296,7 +298,7 @@ export default function Usuarios() {
               + Nueva Unidad
             </button>
           )}
-          {form.rol === "operador" && mostrarNuevaUnidad && (
+          {requiereUnidad(form.rol) && mostrarNuevaUnidad && (
             <div className="inline-form">
               <input
                 placeholder="Nombre de la Unidad nueva"
@@ -348,7 +350,7 @@ export default function Usuarios() {
               <span>
                 <strong>{u.nombre || u.id}</strong> — {u.id}
                 <span className="etiquetas">
-                  <span className="tag">{u.rol === "admin" ? "Admin" : "Operador"}</span>
+                  <span className="tag">{etiquetaRol(u.rol)}</span>
                   {u.unidad && <span className="tag">{u.unidad}</span>}
                   {u.grado && <span className="tag">{u.grado}</span>}
                   {!activo && <span className="tag tag-baja">Inactivo</span>}

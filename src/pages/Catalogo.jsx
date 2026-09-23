@@ -8,6 +8,7 @@ import {
 } from "../lib/catalogo";
 import { useCatalogo } from "../lib/fuentes";
 import { useAuth } from "../auth/AuthContext";
+import { esAdmin as puedeAdministrar } from "../lib/roles";
 
 const NUEVO_VACIO = {
   nombre: "",
@@ -17,7 +18,7 @@ const NUEVO_VACIO = {
 
 export default function Catalogo() {
   const { perfil } = useAuth();
-  const esAdmin = perfil?.rol === "admin";
+  const esAdmin = puedeAdministrar(perfil);
   const [modo, setModo] = useState(null); // null | "editar" | "nuevo"
   const [productoId, setProductoId] = useState("");
 

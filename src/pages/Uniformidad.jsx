@@ -7,11 +7,14 @@ import SelectorBuscable from "../components/SelectorBuscable";
 import { crearPedido, registrarAbono } from "../lib/pedidos";
 import { linkWhatsapp } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
+import { esAdmin, veTodasLasUnidades, esSoloLectura } from "../lib/roles";
 
 export default function Uniformidad() {
   const { user, perfil } = useAuth();
-  const esAdmin = perfil?.rol === "admin";
-  const [unidad, setUnidad] = useState(esAdmin ? "" : perfil?.unidad || "");
+  const puedeElegirUnidad = veTodasLasUnidades(perfil);
+  const soloLectura = esSoloLectura(perfil);
+  // Responsable/Instructor traen su Unidad precargada y fija; el resto elige.
+  const [unidad, setUnidad] = useState(puedeElegirUnidad ? "" : perfil?.unidad || "");
 
   const [elementoSeleccionado, setElementoSeleccionado] = useState(null);
   const [elementoParaConfirmar, setElementoParaConfirmar] = useState(null);
@@ -26,8 +29,8 @@ export default function Uniformidad() {
   const [cerrando, setCerrando] = useState(false);
   const [ventaCerrada, setVentaCerrada] = useState(false);
 
-  const unidades = useUnidades(esAdmin);
-  // El Admin elige una Unidad antes de cargar sus elementos (no se leen todas).
+  const unidades = useUnidades(puedeElegirUnidad);
+  // Se elige una Unidad antes de cargar sus elementos (no se leen todas).
   const elementos = useElementos(unidad);
   const catalogo = useCatalogo();
 
@@ -148,6 +151,18 @@ export default function Uniformidad() {
 
   const totalCarrito = carrito.reduce((s, i) => s + i.monto, 0);
 
+  if (soloLectura) {
+    return (
+      <div className="page">
+        <h1>Uniformidad</h1>
+        <p className="nota">
+          Tu rol es de solo consulta y no registra pedidos ni pagos. Para ver el historial de
+          compras de un elemento, entra a su perfil desde Elementos.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <h1>Uniformidad</h1>
@@ -155,7 +170,7 @@ export default function Uniformidad() {
       {!elementoSeleccionado && (
         <div className="card">
           <h2>Selecciona un elemento</h2>
-          {esAdmin && (
+          {puedeElegirUnidad && (
             <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
               <option value="">Selecciona una Unidad...</option>
               {unidades.map((u) => (
@@ -322,7 +337,7 @@ export default function Uniformidad() {
       )}
 
       <p style={{ marginTop: 24 }}>
-        {esAdmin && (
+        {esAdmin(perfil) && (
           <Link to="/catalogo" className="volver">
             Administrar catálogo de productos →
           </Link>
