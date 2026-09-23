@@ -18,7 +18,8 @@ export function pedidoDeAbono(abono) {
 
 export function filaDeAbono(abono, pedido, elementoNombre) {
   return {
-    id: `abono-${abono.id}`,
+    // El ID de un abono solo es único dentro de su pedido: la fila usa la ruta.
+    id: `abono-${abono.elementoId}/${abono.pedidoId}/${abono.id}`,
     tipo: "uniforme",
     pedidoId: abono.pedidoId,
     elementoId: abono.elementoId,
@@ -37,7 +38,7 @@ export function filaDeAbono(abono, pedido, elementoNombre) {
 export function filaDeCuota(cuota, elementoNombre) {
   const meses = cuota.meses || [];
   return {
-    id: `cuota-${cuota.id}`,
+    id: `cuota-${cuota.elementoId}/${cuota.id}`,
     tipo: "mensualidad",
     elementoId: cuota.elementoId,
     elementoNombre: elementoNombre || "?",
@@ -150,6 +151,7 @@ export function filaDePedido(pedido) {
     productoNombre: pedido.productoNombre || pedido.articulo || "?",
     talla: pedido.talla || "",
     color: pedido.color || "",
+    cantidad: Number(pedido.cantidad) || 1,
     precioTotal: precio,
     pagado,
     saldoPendiente: liquidado ? 0 : saldoCrudo,
@@ -167,33 +169,68 @@ export function filaDePedido(pedido) {
   };
 }
 
+// Identifica una variante (producto, talla y color): enlaza lo que se debe con
+// lo que hay en "Uniforme recibido" (lib/inventario.js).
+export const claveVariante = ({ productoNombre, talla, color }) =>
+  `${productoNombre || ""}|${talla || ""}|${color || ""}`;
+
 // Porcentaje del precio ya pagado (0 a 100).
 export const porcentajePagado = (f) =>
   f.precioTotal > 0 ? Math.min(100, Math.round((f.pagado / f.precioTotal) * 100)) : 100;
 
-// Pedidos pendientes (deben dinero o falta entregarlos), primero los de
-// mayor deuda.
-export function pedidosPendientes(filas) {
-  return filas
-    .filter((f) => f.pendiente)
-    .sort(
-      (a, b) =>
-        b.saldoPendiente - a.saldoPendiente ||
-        (a.elementoNombre || "").localeCompare(b.elementoNombre || "", "es")
-    );
+// Uniformidad por entregar: las piezas que faltan por entregar, sumadas por
+// producto, talla y color (sin datos de elementos). Sirve para saber qué hay
+// que conseguir o entregar; la entrega se marca en cada pedido.
+const porTalla = (a, b) =>
+  (a.talla || "").localeCompare(b.talla || "", "es", { numeric: true }) ||
+  (a.color || "").localeCompare(b.color || "", "es");
+
+//
+// Con `existencias` (Map claveVariante → piezas en "Uniforme recibido", ver
+// lib/inventario.js) cada variante dice cuántas ya se recibieron
+// (`recibido`, hasta lo que se debe) y cuántas faltan por recibir.
+export function uniformidadPorEntregar(filas, existencias = new Map()) {
+  const productos = new Map();
+  for (const f of filas) {
+    if (!f.faltaEntregar) continue;
+    const nombre = f.productoNombre || f.articulo;
+    if (!productos.has(nombre)) {
+      productos.set(nombre, { producto: nombre, piezas: 0, pagadas: 0, conSaldo: 0, variantes: new Map() });
+    }
+    const prod = productos.get(nombre);
+    const clave = `${f.talla}|${f.color}`;
+    if (!prod.variantes.has(clave)) {
+      prod.variantes.set(clave, { talla: f.talla, color: f.color, piezas: 0, pagadas: 0, conSaldo: 0 });
+    }
+    const variante = prod.variantes.get(clave);
+    for (const grupo of [prod, variante]) {
+      grupo.piezas += f.cantidad;
+      if (f.liquidado) grupo.pagadas += f.cantidad;
+      else grupo.conSaldo += f.cantidad;
+    }
+  }
+  return [...productos.values()]
+    .map((prod) => {
+      const variantes = [...prod.variantes.values()].sort(porTalla).map((v) => {
+        const enExistencia = existencias.get(claveVariante({ productoNombre: prod.producto, ...v })) || 0;
+        const recibido = Math.min(enExistencia, v.piezas);
+        return { ...v, recibido, faltaRecibir: v.piezas - recibido };
+      });
+      const recibido = variantes.reduce((s, v) => s + v.recibido, 0);
+      return { ...prod, variantes, recibido, faltaRecibir: prod.piezas - recibido };
+    })
+    .sort((a, b) => a.producto.localeCompare(b.producto, "es"));
 }
 
-export function resumenPendientes(filas) {
-  const suma = (f) => filas.reduce((s, x) => s + f(x), 0);
+export function resumenUniformidad(productos) {
+  const suma = (f) => productos.reduce((s, x) => s + f(x), 0);
   return {
-    pedidos: filas.length,
-    elementos: new Set(filas.map((f) => f.elementoId)).size,
-    elementosConDeuda: new Set(filas.filter((f) => f.debeDinero).map((f) => f.elementoId)).size,
-    porCobrar: suma((f) => f.saldoPendiente),
-    pagado: suma((f) => f.pagado),
-    valorTotal: suma((f) => f.precioTotal),
-    conDeuda: filas.filter((f) => f.debeDinero).length,
-    sinEntregar: filas.filter((f) => f.faltaEntregar).length,
+    piezas: suma((p) => p.piezas),
+    pagadas: suma((p) => p.pagadas),
+    conSaldo: suma((p) => p.conSaldo),
+    recibido: suma((p) => p.recibido || 0),
+    faltaRecibir: suma((p) => p.faltaRecibir ?? p.piezas),
+    productos: productos.length,
   };
 }
 

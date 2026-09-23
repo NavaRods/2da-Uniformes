@@ -2,6 +2,7 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { getDocsFromCache } from "firebase/firestore";
 import { listenElementos } from "./elementos";
 import { listenBajasPedidos, listenPedidosDeUnidad, sinBorrados } from "./pedidos";
+import { listenInventario } from "./inventario";
 import { consultaCatalogo } from "./catalogo";
 import { consultaUnidades, compararUnidades } from "./unidades";
 import { consultaGrados } from "./gradosDb";
@@ -123,6 +124,7 @@ const usuarios = crearFuente(escucharVersionada("usuarios", consultaUsuarios, li
 const configuracion = crearFuente((cb) => listenConfiguracion(cb, () => cb({})));
 const elementosPorUnidad = new Map();
 const pedidosPorUnidad = new Map();
+const inventarioPorUnidad = new Map();
 
 function fuenteElementos(unidad) {
   if (!elementosPorUnidad.has(unidad)) {
@@ -162,6 +164,14 @@ function fuentePedidos(unidad) {
   return pedidosPorUnidad.get(unidad);
 }
 
+// Uniforme recibido de una Unidad (pocos documentos: uno por producto y talla).
+function fuenteInventario(unidad) {
+  if (!inventarioPorUnidad.has(unidad)) {
+    inventarioPorUnidad.set(unidad, crearFuente((cb) => listenInventario(cb, unidad)));
+  }
+  return inventarioPorUnidad.get(unidad);
+}
+
 // Al cerrar sesión se cierran todos los listeners: los datos son de esa cuenta.
 export function reiniciarFuentes() {
   catalogo.detener();
@@ -174,6 +184,8 @@ export function reiniciarFuentes() {
   elementosPorUnidad.clear();
   pedidosPorUnidad.forEach((f) => f.detener());
   pedidosPorUnidad.clear();
+  inventarioPorUnidad.forEach((f) => f.detener());
+  inventarioPorUnidad.clear();
 }
 
 const VACIA = { suscribir: () => () => {}, leer: () => SIN_DATOS };
@@ -223,6 +235,10 @@ export const useElementosDeUnidades = (unidadesPedidas) =>
   useDeUnidades(fuenteElementos, unidadesPedidas);
 export const usePedidosDeUnidades = (unidadesPedidas) =>
   useDeUnidades(fuentePedidos, unidadesPedidas);
+export const useInventarioDeUnidades = (unidadesPedidas) =>
+  useDeUnidades(fuenteInventario, unidadesPedidas);
+// Uniforme recibido de una Unidad; [] mientras carga o sin Unidad.
+export const useInventario = (unidad) => useFuente(unidad ? fuenteInventario(unidad) : null);
 export const useCatalogo = () => useFuente(catalogo);
 // `activo` en false evita suscribirse (p. ej. un Operador no necesita la lista).
 export const useUnidades = (activo = true) => useFuente(activo ? unidades : null);

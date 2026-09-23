@@ -17,6 +17,7 @@ import { db } from "../firebase";
 import { vigilar, vigilarEscritura } from "./estadoFirestore";
 import { fechaLocalISO, horaLocalHHMM } from "./format";
 import { escucharPorCambios } from "./sincronia";
+import { cambioInventario, refInventario } from "./inventario";
 
 // Como los elementos, cada escritura en un pedido guarda la hora del servidor
 // en "actualizadoEn" (las reglas lo exigen): así los pedidos de una Unidad se
@@ -101,13 +102,31 @@ export async function crearPedido(
 // Al entregar (o desmarcar) una pieza se deja constancia de quién la entregó
 // y cuándo, para que el aviso de WhatsApp y la Relación de Pagos tengan el
 // detalle completo del movimiento.
-export async function marcarEntregado(elementoId, pedidoId, entregado, quienEntrego) {
-  return updateDoc(doc(db, "elementos", elementoId, "pedidos", pedidoId), {
+//
+// Con `inventario` ({ unidad, variante, piezas }) la pieza sale de (o, al
+// desmarcar, vuelve a) "Uniforme recibido" en el mismo lote, y el pedido
+// guarda "descontoInventario" para saber si al desmarcarlo hay que regresarla.
+export async function marcarEntregado(elementoId, pedidoId, entregado, quienEntrego, inventario) {
+  const pedidoRef = doc(db, "elementos", elementoId, "pedidos", pedidoId);
+  const cambios = {
     entregado,
     fechaEntrega: entregado ? serverTimestamp() : null,
     quienEntrego: entregado ? quienEntrego || "" : "",
     ...marcaActualizacion(),
-  });
+  };
+  if (!inventario) {
+    if (!entregado) cambios.descontoInventario = false;
+    return updateDoc(pedidoRef, cambios);
+  }
+  const { unidad, variante, piezas } = inventario;
+  const lote = writeBatch(db);
+  lote.update(pedidoRef, { ...cambios, descontoInventario: entregado });
+  lote.set(
+    refInventario(unidad, variante),
+    cambioInventario(unidad, variante, entregado ? -piezas : piezas),
+    { merge: true }
+  );
+  return vigilarEscritura(lote.commit());
 }
 
 // Marca (o resuelve) que una pieza necesita cambio (talla/color equivocado,

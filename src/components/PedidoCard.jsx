@@ -14,6 +14,9 @@ import {
 } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
 import { esAdmin, esSoloLectura } from "../lib/roles";
+import { useInventario } from "../lib/fuentes";
+import { claveVariante } from "../lib/relacionPagos";
+import { existenciasPorVariante } from "../lib/inventario";
 
 function avisar(elemento, mensaje) {
   const telefono = elemento.telefonos?.[0];
@@ -34,6 +37,15 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
   const [motivoCambio, setMotivoCambio] = useState("");
   const [mostrarFormCambio, setMostrarFormCambio] = useState(false);
   const [error, setError] = useState("");
+  const unidad = pedido.unidad || elemento.unidad;
+  const inventario = useInventario(soloLectura ? null : unidad);
+  const variante = {
+    productoNombre: pedido.productoNombre || pedido.articulo,
+    talla: pedido.talla || "",
+    color: pedido.color || "",
+  };
+  const piezas = Number(pedido.cantidad) || 1;
+  const recibidas = existenciasPorVariante(inventario).get(claveVariante(variante)) || 0;
 
   // Los abonos se leen solo si se abre el historial (antes se leían siempre,
   // por cada pedido de la lista).
@@ -69,8 +81,32 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
     setMonto("");
   }
 
+  // Al entregar, la pieza sale de "Uniforme recibido"; si no hay, se pregunta
+  // (se puede entregar igual, sin descontar). Al desmarcar, regresa solo si
+  // se había descontado.
   async function onEntregar(entregado) {
-    await marcarEntregado(elemento.id, pedido.id, entregado, quien);
+    let inventarioMov = null;
+    if (entregado) {
+      if (recibidas >= piezas) {
+        inventarioMov = { unidad, variante, piezas };
+      } else if (
+        !confirm(
+          `No hay "${pedido.articulo}" suficiente en Uniforme recibido (hay ${recibidas}, se ` +
+            `necesitan ${piezas}). ¿Marcarlo como entregado de todos modos? No se descontará nada.`
+        )
+      ) {
+        return;
+      }
+    } else if (pedido.descontoInventario) {
+      inventarioMov = { unidad, variante, piezas };
+    }
+    setError("");
+    try {
+      await marcarEntregado(elemento.id, pedido.id, entregado, quien, inventarioMov);
+    } catch {
+      setError("No se pudo guardar la entrega. Verifica tu conexión e inténtalo de nuevo.");
+      return;
+    }
     avisar(
       elemento,
       mensajeEntrega({
@@ -159,6 +195,13 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
         Entregado
         {pedido.entregado && pedido.quienEntrego ? ` (por ${pedido.quienEntrego})` : ""}
       </label>
+      {!pedido.entregado && !soloLectura && (
+        <p className="nota nota-recibido">
+          {recibidas > 0
+            ? `En Uniforme recibido: ${recibidas}`
+            : "No hay en Uniforme recibido"}
+        </p>
+      )}
 
       {!soloLectura && !liquidado && (
         <form onSubmit={onAbonar} className="inline-form">

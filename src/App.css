@@ -1299,28 +1299,7 @@ th {
   pointer-events: none;
 }
 
-/* --- Relación de pagos: pedidos pendientes agrupados por elemento --- */
-.grupos-pendientes {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-top: 12px;
-}
-
-.grupo-pendiente {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.grupo-cabecera {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
+/* --- Relación de pagos: insignias de un elemento y barra de lo pagado --- */
 .grupo-totales {
   display: flex;
   gap: 6px;
@@ -1359,16 +1338,18 @@ th {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   margin-top: 12px;
 }
 
 .relacion-elemento {
-  margin: 0;
-  gap: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
 
-/* Toda la cabecera es el botón que despliega los pedidos del elemento. */
+/* Toda la cabecera es el botón que despliega las piezas del elemento. */
 .relacion-cabecera {
   display: flex;
   flex-wrap: wrap;
@@ -1376,16 +1357,24 @@ th {
   justify-content: space-between;
   gap: 6px 10px;
   width: 100%;
-  padding: 0;
+  padding: 12px 16px;
   background: none;
   color: inherit;
   text-align: left;
   font-weight: 400;
+  border-radius: var(--radius);
+  /* Al volver a su nombre tras cerrarlo, que no quede bajo la barra fija. */
+  scroll-margin-top: calc(var(--alto-nav, 0px) + 8px);
 }
 
 .relacion-cabecera:disabled {
   cursor: default;
   opacity: 1;
+}
+
+.relacion-cabecera .barra-progreso {
+  flex-basis: 100%;
+  margin-top: 0;
 }
 
 .relacion-nombre {
@@ -1396,14 +1385,216 @@ th {
 }
 
 .relacion-resumen {
+  display: flex;
+  justify-content: space-between;
   flex-basis: 100%;
+}
+
+.relacion-flecha {
+  color: var(--primary);
+}
+
+/* Elemento abierto: resaltado, y su cabecera se queda fija bajo la barra de
+   navegación mientras se recorren sus piezas (solo mientras está abierto). */
+.relacion-elemento.abierto {
+  border: 2px solid var(--primary);
+  box-shadow: var(--shadow);
+}
+
+.relacion-elemento.abierto > .relacion-cabecera {
+  position: sticky;
+  top: var(--alto-nav, 0px);
+  z-index: 5;
+  background: var(--primary-soft);
+  border-bottom: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
+  box-shadow: 0 4px 10px -8px rgba(0, 0, 0, 0.5);
 }
 
 .relacion-detalle {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  background: var(--bg);
+  border-radius: 0 0 calc(var(--radius) - 2px) calc(var(--radius) - 2px);
+}
+
+.relacion-perfil {
+  align-self: flex-end;
+  font-size: 13px;
+}
+
+/* Una pieza por renglón; la franja de color dice su estado. */
+.piezas {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pieza {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--success);
+  border-radius: var(--radius-sm);
+}
+
+.pieza-debe {
+  border-left-color: var(--primary);
+}
+
+.pieza-sin-entregar {
+  border-left-color: var(--accent);
+}
+
+.pieza-fila {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font-weight: 400;
+}
+
+.pieza-nombre {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* .nota trae margin-top negativo (para pegarse a un título); en estos
+   renglones haría que se encime sobre el texto de arriba. */
+.relacion-cabecera .nota,
+.pieza-fila .nota,
+.uniformidad-variantes .nota {
+  margin-top: 0;
+}
+
+.pieza-montos {
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.pieza-estados {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.pieza-detalle {
+  padding: 0 8px 8px;
+}
+
+.pieza-detalle .card {
+  margin: 0;
+  box-shadow: none;
+}
+
+/* --- Relación de pagos: uniformidad por entregar --- */
+.uniformidad-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
-  margin-top: 6px;
+  margin-top: 12px;
+}
+
+.uniformidad-producto {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.uniformidad-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.uniformidad-variantes {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.uniformidad-variantes li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.uniformidad-variantes li + li {
+  border-top: 1px dashed var(--border);
+}
+
+.variante-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.variante-nombre {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.variante-fila .btn-small {
+  margin: 0;
+}
+
+.variante-fila .insignia-ok {
+  margin-left: auto;
+}
+
+.recibir-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.recibir-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  flex: 1 1 140px;
+}
+
+.recibir-form input {
+  width: 100%;
+}
+
+.recibir-form .btn-small {
+  margin: 0;
+}
+
+.recibir-form .error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.nota-recibido {
+  margin-top: 0;
+}
+
+.uniformidad-cantidad {
+  margin-left: auto;
+  min-width: 2ch;
+  text-align: right;
 }
 
 .insignia-neutra {

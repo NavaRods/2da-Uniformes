@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:rules": "firebase emulators:exec --only firestore --project demo-uniformes-rules \"vitest run --config vitest.rules.config.js\"",
     "emulators": "firebase emulators:start --import=./.emulator-data --export-on-exit",
-    "seed:emulator": "node scripts/seed-emulator.mjs"
+    "seed:emulator": "node scripts/seed-emulator.mjs",
+    "seed:pruebas": "node scripts/datos-prueba-emulador.mjs"
   },
   "dependencies": {
     "firebase": "^12.17.1",

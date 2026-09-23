@@ -6,8 +6,9 @@ import {
   pedidoDeAbono,
   ordenarPorHora,
   resumenDia,
-  resumenPendientes,
-  pedidosPendientes,
+  uniformidadPorEntregar,
+  resumenUniformidad,
+  claveVariante,
   relacionPorElemento,
   resumenRelacion,
   porcentajePagado,
@@ -183,47 +184,68 @@ describe("filaDePedido", () => {
   });
 });
 
-describe("pendientes", () => {
+describe("uniformidad por entregar", () => {
+  const pieza = (id, productoNombre, talla, { saldo = 0, entregado = false, color = "" } = {}) =>
+    filaDePedido({
+      id, elementoId: "e", productoNombre, articulo: productoNombre, talla, color,
+      precioTotal: 100, saldoPendiente: saldo, entregado,
+    });
   const filas = [
-    filaDePedido({
-      id: "p1", elementoId: "e1", elementoNombre: "Ana",
-      articulo: "Playera", precioTotal: 300, saldoPendiente: 120, entregado: false,
-    }),
-    filaDePedido({
-      id: "p2", elementoId: "e1", elementoNombre: "Ana",
-      articulo: "Gorra", precioTotal: 50, saldoPendiente: 0, entregado: true,
-    }),
-    filaDePedido({
-      id: "p3", elementoId: "e2", elementoNombre: "Luis",
-      articulo: "Pantalón", precioTotal: 200, saldoPendiente: 200, entregado: false,
-    }),
-    filaDePedido({
-      id: "p4", elementoId: "e3", elementoNombre: "Eva",
-      articulo: "Botas", precioTotal: 400, saldoPendiente: 0, entregado: false,
-    }),
+    pieza("1", "Gorra", "5"),
+    pieza("2", "Gorra", "5", { saldo: 40 }),
+    pieza("3", "Gorra", "10"),
+    pieza("4", "Botas", "2"),
+    pieza("5", "Botas", "2", { entregado: true }),
+    pieza("6", "Playera", "M", { color: "Blanca" }),
   ];
 
-  it("solo deja lo que debe dinero o falta entregar, primero la mayor deuda", () => {
-    expect(pedidosPendientes(filas).map((f) => f.pedidoId)).toEqual(["p3", "p1", "p4"]);
+  it("suma las piezas sin entregar por producto y talla (sin las ya entregadas)", () => {
+    const productos = uniformidadPorEntregar(filas);
+    expect(productos.map((p) => [p.producto, p.piezas])).toEqual([
+      ["Botas", 1],
+      ["Gorra", 3],
+      ["Playera", 1],
+    ]);
+    const gorra = productos.find((p) => p.producto === "Gorra");
+    // Tallas en orden numérico: 5 antes que 10.
+    expect(gorra.variantes.map((v) => [v.talla, v.piezas, v.pagadas, v.conSaldo])).toEqual([
+      ["5", 2, 1, 1],
+      ["10", 1, 1, 0],
+    ]);
+    expect(productos.find((p) => p.producto === "Playera").variantes[0].color).toBe("Blanca");
   });
 
-  it("suma lo por cobrar y cuenta deudas, entregas y elementos que deben", () => {
-    expect(resumenPendientes(pedidosPendientes(filas))).toMatchObject({
-      pedidos: 3,
-      elementos: 3,
-      elementosConDeuda: 2,
-      porCobrar: 320,
-      conDeuda: 2,
-      sinEntregar: 3,
+  it("resume el total de piezas, pagadas y con saldo", () => {
+    expect(resumenUniformidad(uniformidadPorEntregar(filas))).toEqual({
+      piezas: 5,
+      pagadas: 4,
+      conSaldo: 1,
+      recibido: 0,
+      faltaRecibir: 5,
+      productos: 3,
     });
   });
 
-  it("una lista vacía da ceros", () => {
-    expect(resumenPendientes([])).toMatchObject({ pedidos: 0, porCobrar: 0, conDeuda: 0 });
+  it("cruza lo que se debe con Uniforme recibido (sin pasar de lo que se debe)", () => {
+    const existencias = new Map([
+      [claveVariante({ productoNombre: "Gorra", talla: "5" }), 1],
+      [claveVariante({ productoNombre: "Gorra", talla: "10" }), 7],
+    ]);
+    const gorra = uniformidadPorEntregar(filas, existencias).find((p) => p.producto === "Gorra");
+    expect(gorra.variantes.map((v) => [v.talla, v.recibido, v.faltaRecibir])).toEqual([
+      ["5", 1, 1],
+      ["10", 1, 0],
+    ]);
+    expect([gorra.recibido, gorra.faltaRecibir]).toEqual([2, 1]);
+  });
+
+  it("sin piezas pendientes da una lista vacía", () => {
+    expect(uniformidadPorEntregar([pieza("1", "Gorra", "5", { entregado: true })])).toEqual([]);
+    expect(resumenUniformidad([])).toMatchObject({ piezas: 0 });
   });
 
   it("porcentaje pagado", () => {
-    expect(porcentajePagado(filas[0])).toBe(60);
+    expect(porcentajePagado({ pagado: 60, precioTotal: 100 })).toBe(60);
     expect(porcentajePagado({ pagado: 0, precioTotal: 0 })).toBe(100);
   });
 });
@@ -287,5 +309,16 @@ describe("relacionPorElemento", () => {
       porCobrar: 110,
       piezasSinEntregar: 2,
     });
+  });
+});
+
+describe("identificador de cada fila", () => {
+  it("abonos o mensualidades con el mismo ID en distintos pedidos no chocan", () => {
+    const a1 = filaDeAbono({ id: "a1", elementoId: "e1", pedidoId: "p1", monto: 10 }, null, "Ana");
+    const a2 = filaDeAbono({ id: "a1", elementoId: "e2", pedidoId: "p1", monto: 10 }, null, "Luis");
+    const c1 = filaDeCuota({ id: "c1", elementoId: "e1", meses: ["2026-09"], total: 60 }, "Ana");
+    const c2 = filaDeCuota({ id: "c1", elementoId: "e2", meses: ["2026-09"], total: 60 }, "Luis");
+    expect(a1.id).not.toBe(a2.id);
+    expect(c1.id).not.toBe(c2.id);
   });
 });

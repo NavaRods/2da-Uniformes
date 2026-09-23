@@ -10,3 +10,7 @@ dist
 
 .firebase
 .emulator-data
+
+# Salidas generadas fuera de la app (diagramas sueltos, /graphify).
+Claude outputs
+graphify-out

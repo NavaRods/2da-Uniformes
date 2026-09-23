@@ -99,12 +99,12 @@ describe("reunirDatos", () => {
     const partes = Object.keys(conteo);
     expect(partes).toEqual([
       "unidades", "grados", "catalogo", "configuracion", "usuarios",
-      "elementos", "pedidos", "abonos", "cuotas", "asistencias",
+      "elementos", "pedidos", "abonos", "cuotas", "asistencias", "inventario",
     ]);
     // Pedidos, abonos, cuotas y asistencias se leen como grupos de colección.
     const grupos = getDocsFromServer.mock.calls.filter(([c]) => c.grupo).map(([c]) => c.nombre);
     expect(grupos).toEqual(["pedidos", "abonos", "cuotas", "porUnidad"]);
-    expect(registros).toHaveLength(10);
+    expect(registros).toHaveLength(11);
   });
 });
 

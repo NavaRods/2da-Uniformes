@@ -51,6 +51,12 @@ npm run emulators
 # crea un usuario Super Admin de prueba y una Unidad
 npm run seed:emulator tu-correo@ejemplo.com 2a
 
+# Opcional: datos de prueba (Unidades 1a-3a, ~100 elementos con pedidos,
+# abonos, mensualidades y asistencias, y un usuario de cada rol:
+# admin@prueba.test, estadomayor@prueba.test, responsable.1a@prueba.test...).
+# Se puede volver a correr: reescribe los mismos datos, no duplica.
+npm run seed:pruebas
+
 # Terminal 2: la app
 npm install
 npm run dev

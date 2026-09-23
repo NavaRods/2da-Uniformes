@@ -38,6 +38,7 @@ const PARTES = [
   ["abonos", () => collectionGroup(db, "abonos")],
   ["cuotas", () => collectionGroup(db, "cuotas")],
   ["asistencias", () => collectionGroup(db, "porUnidad")],
+  ["inventario", () => collection(db, "inventario")],
 ];
 
 export const NOMBRES_PARTES = {
@@ -51,6 +52,7 @@ export const NOMBRES_PARTES = {
   abonos: "Abonos",
   cuotas: "Mensualidades",
   asistencias: "Listas de asistencia",
+  inventario: "Uniforme recibido",
 };
 
 // --- Valores de Firestore <-> JSON ---

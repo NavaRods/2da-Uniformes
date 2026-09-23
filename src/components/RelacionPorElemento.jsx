@@ -4,7 +4,7 @@ import { formatoMoneda } from "../lib/format";
 import { normalizar } from "../lib/busqueda";
 import { ESTADOS_UNIFORME, resumenRelacion } from "../lib/relacionPagos";
 import PedidoCard from "./PedidoCard";
-import { BarraPagado } from "./PedidosPendientes";
+import BarraPagado from "./BarraPagado";
 
 const FILTROS = [
   ["todos", "Todos"],
@@ -21,13 +21,21 @@ const CLASE_ESTADO = {
   "sin-pedidos": "insignia-neutra",
 };
 
+// Estado de una pieza, para el color de su franja: debe dinero, falta
+// entregarla o ya está completa.
+const estadoPieza = (f) => (f.debeDinero ? "debe" : f.faltaEntregar ? "sin-entregar" : "ok");
+
+const detallePieza = (f) =>
+  [f.color, f.talla && `talla ${f.talla}`].filter(Boolean).join(", ");
+
 // Relación pagos ↔ pedidos por elemento. `grupos` viene de
 // relacionPorElemento; `pedidosPorId` y `elementosPorId` dan los datos
-// completos para las tarjetas de pedido (cobrar, entregar, ver sus pagos).
+// completos para la tarjeta de cada pieza (cobrar, entregar, ver sus pagos).
 export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPorId }) {
   const [filtro, setFiltro] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [abierto, setAbierto] = useState(null); // elementoId desplegado
+  const [piezaAbierta, setPiezaAbierta] = useState(null); // fila.id con su tarjeta abierta
 
   const resumen = resumenRelacion(grupos);
   const texto = normalizar(busqueda.trim());
@@ -49,6 +57,15 @@ export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPor
     "al-corriente": resumen.alCorriente,
     "sin-pedidos": resumen.sinPedidos,
   };
+
+  function alternar(elementoId, boton) {
+    const cerrando = abierto === elementoId;
+    setAbierto(cerrando ? null : elementoId);
+    setPiezaAbierta(null);
+    // Al cerrar un elemento largo, la página vuelve a su nombre (si no, quedaría
+    // mucho más abajo, a media lista).
+    if (cerrando) requestAnimationFrame(() => boton.scrollIntoView({ block: "nearest" }));
+  }
 
   return (
     <>
@@ -113,12 +130,12 @@ export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPor
             unidad: g.pedidos[0]?.unidad || "",
           };
           return (
-            <li key={g.elementoId} className="card relacion-elemento">
+            <li key={g.elementoId} className={`relacion-elemento ${estaAbierto ? "abierto" : ""}`}>
               <button
                 type="button"
                 className="relacion-cabecera"
                 aria-expanded={estaAbierto}
-                onClick={() => setAbierto(estaAbierto ? null : g.elementoId)}
+                onClick={(e) => alternar(g.elementoId, e.currentTarget)}
                 disabled={g.piezas === 0}
               >
                 <span className="relacion-nombre">
@@ -143,28 +160,67 @@ export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPor
                 </span>
                 {g.piezas > 0 && (
                   <span className="relacion-resumen nota">
-                    {g.piezas} {g.piezas === 1 ? "pieza" : "piezas"} · pagado{" "}
-                    {formatoMoneda(g.pagado)} de {formatoMoneda(g.valorTotal)}
-                    <span aria-hidden="true"> {estaAbierto ? "▲" : "▼"}</span>
+                    <span>
+                      {g.piezas} {g.piezas === 1 ? "pieza" : "piezas"} · pagado{" "}
+                      {formatoMoneda(g.pagado)} de {formatoMoneda(g.valorTotal)}
+                    </span>
+                    <span className="relacion-flecha" aria-hidden="true">
+                      {estaAbierto ? "▲" : "▼"}
+                    </span>
                   </span>
+                )}
+                {g.piezas > 0 && (
+                  <BarraPagado fila={{ pagado: g.pagado, precioTotal: g.valorTotal }} />
                 )}
               </button>
 
-              {g.piezas > 0 && !estaAbierto && (
-                <BarraPagado fila={{ pagado: g.pagado, precioTotal: g.valorTotal }} />
-              )}
-
               {estaAbierto && (
                 <div className="relacion-detalle">
-                  <Link to={`/elementos/${g.elementoId}`} className="volver">
-                    Ver perfil →
+                  <ul className="piezas">
+                    {g.pedidos.map((f) => {
+                      const pedido = pedidosPorId.get(f.id);
+                      const abierta = piezaAbierta === f.id;
+                      return (
+                        <li key={f.id} className={`pieza pieza-${estadoPieza(f)}`}>
+                          <button
+                            type="button"
+                            className="pieza-fila"
+                            aria-expanded={abierta}
+                            onClick={() => setPiezaAbierta(abierta ? null : f.id)}
+                          >
+                            <span className="pieza-nombre">
+                              <strong>{f.productoNombre}</strong>
+                              {detallePieza(f) && <span className="nota">{detallePieza(f)}</span>}
+                            </span>
+                            <span className="pieza-montos nota">
+                              {formatoMoneda(f.pagado)} / {formatoMoneda(f.precioTotal)}
+                            </span>
+                            <span className="pieza-estados">
+                              <span className={`insignia ${f.debeDinero ? "insignia-abono" : "insignia-ok"}`}>
+                                {f.debeDinero ? `Debe ${formatoMoneda(f.saldoPendiente)}` : "Pagado"}
+                              </span>
+                              <span
+                                className={`insignia ${f.entregado ? "insignia-ok" : "insignia-cuota"}`}
+                              >
+                                {f.entregado ? "Entregado" : "Sin entregar"}
+                              </span>
+                              {f.cambioPendiente && (
+                                <span className="insignia insignia-abono">Cambio</span>
+                              )}
+                            </span>
+                          </button>
+                          {abierta && pedido && (
+                            <div className="pieza-detalle">
+                              <PedidoCard cliente={elemento} pedido={pedido} />
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <Link to={`/elementos/${g.elementoId}`} className="volver relacion-perfil">
+                    Ver perfil completo →
                   </Link>
-                  {g.pedidos.map((f) => {
-                    const pedido = pedidosPorId.get(f.id);
-                    return pedido ? (
-                      <PedidoCard key={f.id} cliente={elemento} pedido={pedido} />
-                    ) : null;
-                  })}
                 </div>
               )}
             </li>

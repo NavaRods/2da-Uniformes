@@ -49,6 +49,7 @@ vi.mock("firebase/firestore", () => ({
   getDoc: (...args) => getDoc(...args),
   getDocs: (...args) => getDocs(...args),
   writeBatch: () => batch,
+  setDoc: vi.fn(),
 }));
 
 vi.mock("../firebase", () => ({ db: {} }));
@@ -100,6 +101,12 @@ describe("crearPedido", () => {
 });
 
 describe("marcarEntregado", () => {
+  beforeEach(() => {
+    batch.set.mockClear();
+    batch.update.mockClear();
+    batch.commit.mockClear();
+  });
+
   it("al entregar, guarda quién entregó y la fecha", async () => {
     await marcarEntregado("el1", "ped1", true, "Carlos");
     const [, datos] = updateDoc.mock.calls[0];
@@ -114,6 +121,25 @@ describe("marcarEntregado", () => {
     expect(datos.entregado).toBe(false);
     expect(datos.quienEntrego).toBe("");
     expect(datos.fechaEntrega).toBeNull();
+  });
+
+  it("con inventario, descuenta la pieza de Uniforme recibido en el mismo lote", async () => {
+    const variante = { productoNombre: "Gorra", talla: "5", color: "" };
+    await marcarEntregado("el1", "ped1", true, "Carlos", { unidad: "1a", variante, piezas: 2 });
+    const [, datos] = batch.update.mock.calls[0];
+    expect(datos.descontoInventario).toBe(true);
+    const [ref, inv, opciones] = batch.set.mock.calls[0];
+    expect(ref.path).toEqual(["inventario", "1a~Gorra~5~"]);
+    expect(inv.cantidad).toEqual({ __op: "increment", value: -2 });
+    expect(opciones).toEqual({ merge: true });
+    expect(batch.commit).toHaveBeenCalled();
+  });
+
+  it("al desmarcar una pieza descontada, la regresa a Uniforme recibido", async () => {
+    const variante = { productoNombre: "Gorra", talla: "5", color: "" };
+    await marcarEntregado("el1", "ped1", false, "Carlos", { unidad: "1a", variante, piezas: 1 });
+    expect(batch.update.mock.calls[0][1].descontoInventario).toBe(false);
+    expect(batch.set.mock.calls[0][1].cantidad).toEqual({ __op: "increment", value: 1 });
   });
 });
 

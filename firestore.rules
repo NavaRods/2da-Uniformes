@@ -248,7 +248,7 @@ service cloud.firestore {
           "precioTotal", "saldoPendiente", "entregado", "quienEntrego",
           "fechaEntrega", "cambioPendiente", "motivoCambio",
           "fechaCambioSolicitado", "ultimoAbonoId", "creadoEn", "unidad",
-          "actualizadoEn"
+          "actualizadoEn", "descontoInventario"
         ]) &&
         // Hora del servidor de esta escritura: los pedidos de una Unidad se
         // sincronizan por cambios (src/lib/sincronia.js), igual que los
@@ -282,7 +282,8 @@ service cloud.firestore {
         return despues.diff(antes).affectedKeys().hasOnly([
           "entregado", "quienEntrego", "fechaEntrega",
           "cambioPendiente", "motivoCambio", "fechaCambioSolicitado",
-          "saldoPendiente", "ultimoAbonoId", "unidad", "actualizadoEn"
+          "saldoPendiente", "ultimoAbonoId", "unidad", "actualizadoEn",
+          "descontoInventario"
         ]);
       }
 
@@ -468,6 +469,36 @@ service cloud.firestore {
         puedeEscribirUnidad(request.resource.data.unidad) &&
         exists(/databases/$(database)/documents/elementos/$(request.resource.data.elementoId)/pedidos/$(request.resource.data.pedidoId)) &&
         !existsAfter(/databases/$(database)/documents/elementos/$(request.resource.data.elementoId)/pedidos/$(request.resource.data.pedidoId));
+    }
+
+    // --- Uniforme recibido (ver src/lib/inventario.js) ---
+    // Piezas que ya llegaron y esperan a entregarse, por Unidad, producto,
+    // talla y color. La cantidad nunca queda negativa: entregar sin
+    // existencias no descuenta (la app pregunta antes).
+    function inventarioValido(datos) {
+      return datos.keys().hasOnly([
+        "unidad", "productoNombre", "talla", "color", "cantidad", "actualizadoEn"
+      ]) &&
+      datos.unidad is string &&
+      datos.productoNombre is string && datos.productoNombre.size() > 0 &&
+      datos.talla is string &&
+      datos.color is string &&
+      datos.cantidad is int && datos.cantidad >= 0;
+    }
+
+    match /inventario/{id} {
+      allow read: if puedeVerUnidad(resource.data.unidad);
+      allow create: if restaurandoRespaldo() ||
+        (inventarioValido(request.resource.data) &&
+          puedeEscribirUnidad(request.resource.data.unidad));
+      allow update: if restaurandoRespaldo() ||
+        (inventarioValido(request.resource.data) &&
+          request.resource.data.unidad == resource.data.unidad &&
+          request.resource.data.productoNombre == resource.data.productoNombre &&
+          request.resource.data.talla == resource.data.talla &&
+          request.resource.data.color == resource.data.color &&
+          puedeEscribirUnidad(resource.data.unidad));
+      allow delete: if puedeEscribirUnidad(resource.data.unidad);
     }
 
     match /{path=**}/porUnidad/{unidadId} {

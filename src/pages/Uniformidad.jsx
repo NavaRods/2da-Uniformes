@@ -1,20 +1,40 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useElementos, useUnidades, useCatalogo } from "../lib/fuentes";
+import {
+  useElementos,
+  useElementosDeUnidades,
+  usePedidosDeUnidades,
+  useUnidades,
+  useCatalogo,
+} from "../lib/fuentes";
 import { requiereTalla, TALLA_TIPO } from "../lib/catalogo";
+import { filaDePedido, relacionPorElemento } from "../lib/relacionPagos";
 import BuscadorElemento from "../components/BuscadorElemento";
 import SelectorBuscable from "../components/SelectorBuscable";
+import RelacionPorElemento from "../components/RelacionPorElemento";
+import CambiosPendientes from "../components/CambiosPendientes";
 import { crearPedido, registrarAbono } from "../lib/pedidos";
 import { linkWhatsapp } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
 import { esAdmin, veTodasLasUnidades, esSoloLectura } from "../lib/roles";
 
+const SIN_UNIDADES = [];
+
+// Uniformidad:
+//  - Venta: registrar una compra nueva a un elemento (producto, talla, pago).
+//    Necesita elegir una sola Unidad (no aplica "Todas").
+//  - Por elemento: cada elemento con sus uniformes, lo pagado y si ya se
+//    entregó. Toca un elemento para ver sus pedidos y sus pagos.
+//  - Cambios: piezas con un cambio por resolver.
+// Por elemento y Cambios aceptan "Todas las Unidades" (Admin/Super
+// Admin/Estado Mayor); Responsable e Instructor solo tienen la suya.
 export default function Uniformidad() {
   const { user, perfil } = useAuth();
   const puedeElegirUnidad = veTodasLasUnidades(perfil);
   const soloLectura = esSoloLectura(perfil);
   // Responsable/Instructor traen su Unidad precargada y fija; el resto elige.
   const [unidad, setUnidad] = useState(puedeElegirUnidad ? "" : perfil?.unidad || "");
+  const [vista, setVista] = useState(soloLectura ? "elementos" : "venta");
 
   const [elementoSeleccionado, setElementoSeleccionado] = useState(null);
   const [elementoParaConfirmar, setElementoParaConfirmar] = useState(null);
@@ -30,9 +50,44 @@ export default function Uniformidad() {
   const [ventaCerrada, setVentaCerrada] = useState(false);
 
   const unidades = useUnidades(puedeElegirUnidad);
-  // Se elige una Unidad antes de cargar sus elementos (no se leen todas).
-  const elementos = useElementos(unidad);
+  // Venta necesita una sola Unidad para cargar sus elementos (no se leen
+  // todas). Por elemento y Cambios sí aceptan "Todas las Unidades": ahí
+  // "unidad" vacío junta la Unidad de cada quien (Responsable/Instructor) o
+  // todas (Admin/Super Admin/Estado Mayor).
+  const elementosVenta = useElementos(unidad);
   const catalogo = useCatalogo();
+
+  const unidadesDeUniformidad = useMemo(() => {
+    if (vista === "venta") return SIN_UNIDADES;
+    if (unidad) return [unidad];
+    if (puedeElegirUnidad) return unidades.map((u) => u.nombre);
+    return perfil?.unidad ? [perfil.unidad] : SIN_UNIDADES;
+  }, [vista, unidad, puedeElegirUnidad, unidades, perfil?.unidad]);
+
+  const elementos = useElementosDeUnidades(unidadesDeUniformidad);
+  const pedidos = usePedidosDeUnidades(unidadesDeUniformidad);
+  const cargandoUniformidad =
+    vista !== "venta" &&
+    (elementos === null ||
+      pedidos === null ||
+      (puedeElegirUnidad && !unidad && unidades.length === 0));
+
+  const datosUniformidad = useMemo(() => {
+    if (!elementos || !pedidos) return null;
+    const elementosPorId = new Map(elementos.map((e) => [e.id, e]));
+    const pedidosPorId = new Map(pedidos.map((p) => [`${p.elementoId}/${p.id}`, p]));
+    const filas = pedidos.map((p) =>
+      filaDePedido({ ...p, elementoNombre: elementosPorId.get(p.elementoId)?.nombre || "" })
+    );
+    return {
+      pedidosPorId,
+      elementosPorId,
+      grupos: relacionPorElemento(elementos, filas),
+      cambios: filas.filter((f) => f.cambioPendiente),
+    };
+  }, [pedidos, elementos]);
+
+  const cuenta = (n) => (datosUniformidad && n ? ` (${n})` : "");
 
   const producto = catalogo.find((p) => p.id === productoId);
   const faltaTalla = requiereTalla(producto) && !talla.trim();
@@ -53,7 +108,7 @@ export default function Uniformidad() {
   }
 
   function elegirElemento(id) {
-    const el = elementos.find((e) => e.id === id);
+    const el = elementosVenta.find((e) => e.id === id);
     setElementoParaConfirmar(el || null);
   }
 
@@ -151,198 +206,253 @@ export default function Uniformidad() {
 
   const totalCarrito = carrito.reduce((s, i) => s + i.monto, 0);
 
-  if (soloLectura) {
-    return (
-      <div className="page">
-        <h1>Uniformidad</h1>
-        <p className="nota">
-          Tu rol es de solo consulta y no registra pedidos ni pagos. Para ver el historial de
-          compras de un elemento, entra a su perfil desde Elementos.
-        </p>
-      </div>
-    );
-  }
+  const tabs = [
+    !soloLectura && ["venta", "Venta"],
+    ["elementos", "Por elemento"],
+    ["cambios", `Cambios${cuenta(datosUniformidad?.cambios.length)}`],
+  ].filter(Boolean);
 
   return (
     <div className="page">
       <h1>Uniformidad</h1>
 
-      {!elementoSeleccionado && (
-        <div className="card">
-          <h2>Selecciona un elemento</h2>
-          {puedeElegirUnidad && (
-            <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
-              <option value="">Selecciona una Unidad...</option>
-              {unidades.map((u) => (
-                <option key={u.id} value={u.nombre}>
-                  {u.nombre}
-                </option>
-              ))}
-            </select>
-          )}
-          <BuscadorElemento elementos={elementos} onSeleccionar={elegirElemento} />
+      {puedeElegirUnidad && (
+        <div className="campo">
+          <label htmlFor="unidad-uniformidad">Unidad</label>
+          <select
+            id="unidad-uniformidad"
+            value={unidad}
+            onChange={(e) => setUnidad(e.target.value)}
+          >
+            <option value="">
+              {vista === "venta" ? "Selecciona una Unidad..." : "Todas las Unidades"}
+            </option>
+            {unidades.map((u) => (
+              <option key={u.id} value={u.nombre}>
+                {u.nombre}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
-      {elementoParaConfirmar && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h2>¿Confirmas que es el elemento correcto?</h2>
-            <p>
-              <strong>{elementoParaConfirmar.nombre}</strong>
-              {elementoParaConfirmar.unidad ? ` — ${elementoParaConfirmar.unidad}` : ""}
-              {elementoParaConfirmar.grupo ? ` (${elementoParaConfirmar.grupo})` : ""}
-            </p>
-            <div className="modal-acciones">
-              <button className="btn-secondary" onClick={cancelarConfirmacion}>
-                Cancelar
-              </button>
-              <button className="btn-primary" onClick={confirmarElemento}>
-                Sí, es correcto
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="tabs" role="tablist">
+        {tabs.map(([clave, etiqueta]) => (
+          <button
+            key={clave}
+            type="button"
+            role="tab"
+            aria-selected={vista === clave}
+            className={`tab ${vista === clave ? "activo" : ""}`}
+            onClick={() => setVista(clave)}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
 
-      {elementoSeleccionado && (
+      {vista === "venta" && !soloLectura && (
         <>
-          <div className="venta-elemento">
-            <strong>{elementoSeleccionado.nombre}</strong>
-            <button
-              className="btn-secondary btn-small"
-              onClick={() => {
-                setElementoSeleccionado(null);
-                setCarrito([]);
-              }}
-            >
-              Cambiar elemento
-            </button>
-          </div>
-
-          {ventaCerrada && (
-            <p className="success-msg">✅ Venta cerrada y registrada.</p>
+          {!elementoSeleccionado && (
+            <div className="card">
+              <h2>Selecciona un elemento</h2>
+              {!unidad && <p className="nota">Elige una Unidad arriba.</p>}
+              <BuscadorElemento elementos={elementosVenta} onSeleccionar={elegirElemento} />
+            </div>
           )}
 
-          <div className="card">
-            <h2>Agregar artículo</h2>
-            <SelectorBuscable
-              items={catalogo}
-              valorId={productoId}
-              obtenerTexto={(p) => `${p.nombre} — $${p.precio}`}
-              onSeleccionar={onSeleccionarProducto}
-              placeholder="Selecciona un producto..."
-              placeholderBusqueda="Buscar por nombre..."
-            />
-
-            {producto?.colores?.length > 0 && (
-              <select value={color} onChange={(e) => setColor(e.target.value)}>
-                {producto.colores.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
-            )}
-
-            {producto?.tallaTipo === TALLA_TIPO.LISTA && (
-              <select value={talla} onChange={(e) => setTalla(e.target.value)}>
-                <option value="">Talla...</option>
-                {producto.tallas.map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </select>
-            )}
-
-            {producto?.tallaTipo === TALLA_TIPO.LIBRE && (
-              <input
-                placeholder="Talla (a la medida)"
-                value={talla}
-                onChange={(e) => setTalla(e.target.value)}
-              />
-            )}
-
-            {producto && (
-              <>
-                <div className="inline-form">
-                  <label className="checkbox">
-                    <input
-                      type="radio"
-                      name="tipoPago"
-                      checked={tipoPago === "liquidacion"}
-                      onChange={() => onCambiarTipoPago("liquidacion")}
-                    />
-                    Liquidación (${producto.precio})
-                  </label>
-                  <label className="checkbox">
-                    <input
-                      type="radio"
-                      name="tipoPago"
-                      checked={tipoPago === "abono"}
-                      onChange={() => onCambiarTipoPago("abono")}
-                    />
-                    Abono
-                  </label>
+          {elementoParaConfirmar && (
+            <div className="modal-overlay">
+              <div className="modal">
+                <h2>¿Confirmas que es el elemento correcto?</h2>
+                <p>
+                  <strong>{elementoParaConfirmar.nombre}</strong>
+                  {elementoParaConfirmar.unidad ? ` — ${elementoParaConfirmar.unidad}` : ""}
+                  {elementoParaConfirmar.grupo ? ` (${elementoParaConfirmar.grupo})` : ""}
+                </p>
+                <div className="modal-acciones">
+                  <button className="btn-secondary" onClick={cancelarConfirmacion}>
+                    Cancelar
+                  </button>
+                  <button className="btn-primary" onClick={confirmarElemento}>
+                    Sí, es correcto
+                  </button>
                 </div>
+              </div>
+            </div>
+          )}
 
-                {tipoPago === "abono" && (
+          {elementoSeleccionado && (
+            <>
+              <div className="venta-elemento">
+                <strong>{elementoSeleccionado.nombre}</strong>
+                <button
+                  className="btn-secondary btn-small"
+                  onClick={() => {
+                    setElementoSeleccionado(null);
+                    setCarrito([]);
+                  }}
+                >
+                  Cambiar elemento
+                </button>
+              </div>
+
+              {ventaCerrada && (
+                <p className="success-msg">✅ Venta cerrada y registrada.</p>
+              )}
+
+              <div className="card">
+                <h2>Agregar artículo</h2>
+                <SelectorBuscable
+                  items={catalogo}
+                  valorId={productoId}
+                  obtenerTexto={(p) => `${p.nombre} — $${p.precio}`}
+                  onSeleccionar={onSeleccionarProducto}
+                  placeholder="Selecciona un producto..."
+                  placeholderBusqueda="Buscar por nombre..."
+                />
+
+                {producto?.colores?.length > 0 && (
+                  <select value={color} onChange={(e) => setColor(e.target.value)}>
+                    {producto.colores.map((c) => (
+                      <option key={c}>{c}</option>
+                    ))}
+                  </select>
+                )}
+
+                {producto?.tallaTipo === TALLA_TIPO.LISTA && (
+                  <select value={talla} onChange={(e) => setTalla(e.target.value)}>
+                    <option value="">Talla...</option>
+                    {producto.tallas.map((t) => (
+                      <option key={t}>{t}</option>
+                    ))}
+                  </select>
+                )}
+
+                {producto?.tallaTipo === TALLA_TIPO.LIBRE && (
                   <input
-                    placeholder="Monto del abono"
-                    type="number"
-                    value={monto}
-                    onChange={(e) => setMonto(e.target.value)}
+                    placeholder="Talla (a la medida)"
+                    value={talla}
+                    onChange={(e) => setTalla(e.target.value)}
                   />
                 )}
 
-                <button
-                  className="btn-primary"
-                  onClick={agregarAlCarrito}
-                  disabled={faltaTalla}
-                >
-                  + Agregar a la venta
-                </button>
-              </>
-            )}
-          </div>
+                {producto && (
+                  <>
+                    <div className="inline-form">
+                      <label className="checkbox">
+                        <input
+                          type="radio"
+                          name="tipoPago"
+                          checked={tipoPago === "liquidacion"}
+                          onChange={() => onCambiarTipoPago("liquidacion")}
+                        />
+                        Liquidación (${producto.precio})
+                      </label>
+                      <label className="checkbox">
+                        <input
+                          type="radio"
+                          name="tipoPago"
+                          checked={tipoPago === "abono"}
+                          onChange={() => onCambiarTipoPago("abono")}
+                        />
+                        Abono
+                      </label>
+                    </div>
 
-          {carrito.length > 0 && (
-            <div className="card">
-              <h2>Venta en curso</h2>
-              {carrito.map((item) => (
-                <div className="carrito-item" key={item.key}>
-                  <span>
-                    {item.articulo} — ${item.monto} (
-                    {item.tipoPago === "liquidacion" ? "Liquidado" : "Abono"})
-                  </span>
+                    {tipoPago === "abono" && (
+                      <input
+                        placeholder="Monto del abono"
+                        type="number"
+                        value={monto}
+                        onChange={(e) => setMonto(e.target.value)}
+                      />
+                    )}
+
+                    <button
+                      className="btn-primary"
+                      onClick={agregarAlCarrito}
+                      disabled={faltaTalla}
+                    >
+                      + Agregar a la venta
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {carrito.length > 0 && (
+                <div className="card">
+                  <h2>Venta en curso</h2>
+                  {carrito.map((item) => (
+                    <div className="carrito-item" key={item.key}>
+                      <span>
+                        {item.articulo} — ${item.monto} (
+                        {item.tipoPago === "liquidacion" ? "Liquidado" : "Abono"})
+                      </span>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => quitarDelCarrito(item.key)}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                  <div className="carrito-total">
+                    <span>Total</span>
+                    <span>${totalCarrito}</span>
+                  </div>
                   <button
-                    className="btn-secondary"
-                    onClick={() => quitarDelCarrito(item.key)}
+                    className="btn-primary"
+                    onClick={cerrarVenta}
+                    disabled={cerrando}
                   >
-                    Quitar
+                    {cerrando ? "Cerrando venta..." : "Cerrar venta"}
                   </button>
                 </div>
-              ))}
-              <div className="carrito-total">
-                <span>Total</span>
-                <span>${totalCarrito}</span>
-              </div>
-              <button
-                className="btn-primary"
-                onClick={cerrarVenta}
-                disabled={cerrando}
-              >
-                {cerrando ? "Cerrando venta..." : "Cerrar venta"}
-              </button>
-            </div>
+              )}
+            </>
+          )}
+
+          <p style={{ marginTop: 24 }}>
+            {esAdmin(perfil) && (
+              <Link to="/catalogo" className="volver">
+                Administrar catálogo de productos →
+              </Link>
+            )}
+          </p>
+        </>
+      )}
+
+      {vista === "elementos" && (
+        <>
+          {cargandoUniformidad && <p className="nota">Cargando pedidos…</p>}
+          {!cargandoUniformidad && datosUniformidad && (
+            <>
+              <p className="nota">
+                Cada elemento con sus uniformes: cuánto se ha pagado de cada pieza, si ya se
+                entregó y quién aún debe. Toca un elemento para ver sus pedidos y sus pagos.
+              </p>
+              <RelacionPorElemento
+                grupos={datosUniformidad.grupos}
+                pedidosPorId={datosUniformidad.pedidosPorId}
+                elementosPorId={datosUniformidad.elementosPorId}
+              />
+            </>
           )}
         </>
       )}
 
-      <p style={{ marginTop: 24 }}>
-        {esAdmin(perfil) && (
-          <Link to="/catalogo" className="volver">
-            Administrar catálogo de productos →
-          </Link>
-        )}
-      </p>
+      {vista === "cambios" && (
+        <>
+          {cargandoUniformidad && <p className="nota">Cargando pedidos…</p>}
+          {!cargandoUniformidad && datosUniformidad && (
+            <>
+              <p className="nota">Piezas con cambio por resolver, de todos los días.</p>
+              <CambiosPendientes cambios={datosUniformidad.cambios} />
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }

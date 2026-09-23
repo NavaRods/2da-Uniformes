@@ -15,6 +15,7 @@ import {
   collection,
   deleteField,
   serverTimestamp,
+  increment,
   Timestamp,
 } from "firebase/firestore";
 
@@ -597,5 +598,42 @@ describe("respaldos: contraseña y restauración", () => {
         }
       })
     );
+  });
+});
+
+describe("uniforme recibido (inventario)", () => {
+  const inv = (db, id = "A~Gorra~5~") => doc(db, "inventario", id);
+  const datos = (extra) => ({
+    unidad: "A", productoNombre: "Gorra", talla: "5", color: "", cantidad: 3,
+    actualizadoEn: serverTimestamp(), ...extra,
+  });
+
+  it("el Responsable registra lo recibido de su Unidad, no de otra", async () => {
+    await assertSucceeds(setDoc(inv(como(OP_A)), datos()));
+    await assertFails(setDoc(inv(como(OP_B), "B"), datos()));
+  });
+
+  it("Estado Mayor lo consulta pero no lo cambia", async () => {
+    await setDoc(inv(como(OP_A)), datos());
+    await assertSucceeds(getDoc(inv(como(EM))));
+    await assertFails(setDoc(inv(como(EM)), datos({ cantidad: 9 })));
+  });
+
+  it("la cantidad no queda negativa ni cambia de Unidad o producto", async () => {
+    const db = como(OP_A);
+    await setDoc(inv(db), datos());
+    await assertSucceeds(setDoc(inv(db), { cantidad: increment(-3) }, { merge: true }));
+    await assertFails(setDoc(inv(db), { cantidad: increment(-1) }, { merge: true }));
+    await assertFails(setDoc(inv(db), { productoNombre: "Botas" }, { merge: true }));
+    await assertFails(setDoc(inv(db), datos({ cantidad: 1.5 })));
+  });
+
+  it("entregar un pedido descuenta del inventario en el mismo lote", async () => {
+    const db = como(OP_A);
+    await setDoc(inv(db), datos());
+    const lote = writeBatch(db);
+    lote.update(pedidoRef(db, "pedLimpio"), { entregado: true, descontoInventario: true, ...ahora() });
+    lote.set(inv(db), { cantidad: increment(-1), ...ahora() }, { merge: true });
+    await assertSucceeds(lote.commit());
   });
 });

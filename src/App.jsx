@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { ThemeProvider, useTheme } from "./theme/ThemeContext";
@@ -50,10 +51,21 @@ function Nav() {
   const { user, logout } = useAuth();
   const { tema, alternar } = useTheme();
   const location = useLocation();
+  // Altura real de la barra (cambia si sus botones bajan de renglón en el
+  // teléfono) en --alto-nav: lo que se queda fijo arriba (p. ej. el nombre del
+  // elemento abierto en la Relación de pagos) se acomoda justo debajo.
+  const medir = useCallback((nav) => {
+    if (!nav) return;
+    const observador = new ResizeObserver(() =>
+      document.documentElement.style.setProperty("--alto-nav", `${nav.offsetHeight}px`)
+    );
+    observador.observe(nav);
+    return () => observador.disconnect();
+  }, []);
   if (!user) return null;
 
   return (
-    <nav className="nav">
+    <nav className="nav" ref={medir}>
       {location.pathname !== "/" && <Link to="/">← Inicio</Link>}
       <span className="nav-spacer" />
       <button className="theme-toggle" onClick={alternar} title="Cambiar tema">
