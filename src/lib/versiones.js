@@ -25,7 +25,14 @@ export const VIGENCIA_MS = 3 * 24 * 60 * 60 * 1000;
 const versionesRef = () => doc(db, "meta", "versiones");
 
 export function marcarCambio(lote, coleccion) {
-  lote.set(versionesRef(), { [coleccion]: serverTimestamp() }, { merge: true });
+  marcarCambios(lote, [coleccion]);
+}
+
+// Varias colecciones en una sola escritura del documento de versiones.
+export function marcarCambios(lote, colecciones) {
+  if (colecciones.length === 0) return;
+  const cambios = Object.fromEntries(colecciones.map((c) => [c, serverTimestamp()]));
+  lote.set(versionesRef(), cambios, { merge: true });
 }
 
 // Escribe en una colección versionada: `escribir(lote)` agrega sus cambios al

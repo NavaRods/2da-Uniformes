@@ -410,3 +410,85 @@ describe("versiones (meta/versiones)", () => {
     );
   });
 });
+
+describe("respaldos: contraseña y restauración", () => {
+  const verificador = (extra = {}) => ({
+    sal: "c2Fs",
+    verificador: "dmVy",
+    iteraciones: 600000,
+    por: ADMIN,
+    actualizadoEn: serverTimestamp(),
+    ...extra,
+  });
+
+  it("solo un Admin lee y define el verificador de la contraseña", async () => {
+    await assertFails(setDoc(doc(como(OP_A), "meta", "respaldo"), verificador({ por: OP_A })));
+    await assertSucceeds(setDoc(doc(como(ADMIN), "meta", "respaldo"), verificador()));
+    await assertSucceeds(getDoc(doc(como(ADMIN), "meta", "respaldo")));
+    await assertFails(getDoc(doc(como(OP_A), "meta", "respaldo")));
+  });
+
+  it("rechaza un verificador débil, ajeno o con campos de más", async () => {
+    const ref = doc(como(ADMIN), "meta", "respaldo");
+    await assertFails(setDoc(ref, verificador({ iteraciones: 1000 })));
+    await assertFails(setDoc(ref, verificador({ por: OP_A })));
+    await assertFails(setDoc(ref, verificador({ contrasena: "secreta" })));
+  });
+
+  // Lote de restauración como el de restaurar() en src/lib/respaldo.js.
+  function restauracion(db, por, escribir) {
+    const batch = writeBatch(db);
+    escribir(batch);
+    batch.set(doc(db, "meta", "restauracion"), { en: serverTimestamp(), por, respaldo: "r.json" });
+    return batch.commit();
+  }
+
+  it("un Admin restaura pedidos y abonos tal como estaban (saldo incluido)", async () => {
+    const db = como(ADMIN);
+    await assertSucceeds(
+      restauracion(db, ADMIN, (b) => {
+        b.set(pedidoRef(db), { ...pedidoBase, saldoPendiente: 50, ultimoAbonoId: "abX" });
+        b.set(abonoRef(db, "abX"), { unidad: "A", monto: 250, fechaLocal: "2026-09-01" });
+        b.set(doc(db, "elementos", "el1", "cuotas", "cu9"), { tipo: "mensualidad", meses: ["2026-08"] });
+      })
+    );
+  });
+
+  it("sin marcar meta/restauracion, esas escrituras siguen prohibidas", async () => {
+    const db = como(ADMIN);
+    await assertFails(setDoc(pedidoRef(db), { ...pedidoBase, saldoPendiente: 50 }));
+  });
+
+  it("un Operador no puede restaurar", async () => {
+    const db = como(OP_A);
+    await assertFails(
+      restauracion(db, OP_A, (b) => b.set(pedidoRef(db), { ...pedidoBase, saldoPendiente: 0 }))
+    );
+  });
+
+  it("la marca debe ser del propio Admin y con la hora del servidor", async () => {
+    const db = como(ADMIN);
+    await assertFails(
+      setDoc(doc(db, "meta", "restauracion"), { en: serverTimestamp(), por: OP_A, respaldo: "" })
+    );
+    await assertFails(
+      setDoc(doc(db, "meta", "restauracion"), { en: Timestamp.fromMillis(0), por: ADMIN, respaldo: "" })
+    );
+  });
+
+  it("un lote grande (400 pedidos de elementos distintos) no rebasa los límites de las reglas", async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const b = writeBatch(ctx.firestore());
+      for (let i = 0; i < 400; i++) b.set(doc(ctx.firestore(), "elementos", `r${i}`), elementoA);
+      await b.commit();
+    });
+    const db = como(ADMIN);
+    await assertSucceeds(
+      restauracion(db, ADMIN, (b) => {
+        for (let i = 0; i < 400; i++) {
+          b.set(doc(db, "elementos", `r${i}`, "pedidos", "p"), { ...pedidoBase, saldoPendiente: 10 });
+        }
+      })
+    );
+  });
+});

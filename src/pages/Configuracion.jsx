@@ -12,10 +12,12 @@ import {
 import { CATEGORIAS, ordenarGrados } from "../lib/grados";
 import { editarProducto } from "../lib/catalogo";
 import { useCatalogo, useGradosGuardados, useUnidades } from "../lib/fuentes";
+import SeccionRespaldo from "../components/SeccionRespaldo";
 
-// Configuración (solo Admin): Unidades, grados militares y acceso al catálogo.
+// Configuración (solo Admin): Unidades, grados militares, acceso al catálogo
+// y respaldos.
 export default function Configuracion() {
-  const [tab, setTab] = useState("unidades"); // unidades | grados | catalogo
+  const [tab, setTab] = useState("unidades"); // unidades | grados | catalogo | respaldo
 
   return (
     <div className="page">
@@ -26,6 +28,7 @@ export default function Configuracion() {
           ["unidades", "Unidades"],
           ["grados", "Grados"],
           ["catalogo", "Catálogo"],
+          ["respaldo", "Respaldo"],
         ].map(([clave, etiqueta]) => (
           <button
             key={clave}
@@ -43,6 +46,7 @@ export default function Configuracion() {
       {tab === "unidades" && <SeccionUnidades />}
       {tab === "grados" && <SeccionGrados />}
       {tab === "catalogo" && <SeccionCatalogo />}
+      {tab === "respaldo" && <SeccionRespaldo />}
     </div>
   );
 }

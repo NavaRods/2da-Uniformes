@@ -153,6 +153,27 @@ abierta con la versión anterior debe recargarla; hasta entonces sus cambios en
 elementos serán rechazados.
 
 
+## Respaldos (Configuración > Respaldo, solo Admin)
+
+Copia completa de la app cifrada con la **contraseña de respaldos** (AES-GCM;
+en Firestore solo se guarda un verificador en `meta/respaldo`, nunca la
+contraseña). Se guarda en el Google Drive del Admin, carpeta "Respaldos
+Uniformes", o se descarga al dispositivo. Restaurar pide la contraseña con la
+que se hizo ese respaldo y una confirmación; cada lote deja registro en
+`meta/restauracion` (quién, cuándo, qué archivo).
+
+- **Una sola vez**: activa la API de Google Drive del proyecto en
+  <https://console.cloud.google.com/apis/library/drive.googleapis.com?project=da-unidad-6c88d>.
+  Sin eso, "Respaldar en Google Drive" avisa que la API no está activada
+  (descargar al dispositivo funciona igual).
+- La app pide el permiso `drive.file`: solo ve los archivos que ella misma
+  crea, no el resto del Drive.
+- Cada respaldo lee todos los documentos (unos miles de lecturas): úsalo de
+  vez en cuando, no a diario.
+- Si se olvida la contraseña, los respaldos hechos con ella no se pueden
+  abrir.
+
+
 ## Seguridad
 
 - **Reglas de Firestore** (`firestore.rules`): roles Admin/Operador, datos

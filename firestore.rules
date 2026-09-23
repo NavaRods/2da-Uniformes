@@ -54,6 +54,39 @@ service cloud.firestore {
         : request.resource.data.diff(resource.data).affectedKeys();
     }
 
+    // --- Respaldos (ver src/lib/respaldo.js) ---
+    // Verificador de la contraseña de respaldos (nunca la contraseña).
+    match /meta/respaldo {
+      allow read: if esAdmin();
+      allow create, update: if esAdmin() &&
+        request.resource.data.keys().hasOnly(["sal", "verificador", "iteraciones", "por", "actualizadoEn"]) &&
+        request.resource.data.sal is string &&
+        request.resource.data.verificador is string &&
+        request.resource.data.iteraciones is int && request.resource.data.iteraciones >= 100000 &&
+        request.resource.data.por == request.auth.token.email.lower() &&
+        request.resource.data.actualizadoEn == request.time;
+    }
+
+    // Última restauración: quién, cuándo y de qué archivo. Cada lote de una
+    // restauración la escribe; es lo que habilita restaurandoRespaldo().
+    match /meta/restauracion {
+      allow read: if esAdmin();
+      allow create, update: if esAdmin() &&
+        request.resource.data.keys().hasOnly(["en", "por", "respaldo"]) &&
+        request.resource.data.en == request.time &&
+        request.resource.data.por == request.auth.token.email.lower() &&
+        request.resource.data.respaldo is string;
+    }
+
+    // Un Admin restaurando un respaldo: el mismo lote marca meta/restauracion.
+    // Permite reescribir pedidos, abonos y mensualidades tal como estaban en
+    // el respaldo (sus reglas normales impiden, con razón, fijar un saldo o
+    // crear un abono suelto).
+    function restaurandoRespaldo() {
+      let marca = getAfter(/databases/$(database)/documents/meta/restauracion);
+      return esAdmin() && marca != null && marca.data.get("en", null) == request.time;
+    }
+
     match /meta/versiones {
       allow read: if esUsuarioAutorizado();
       // Solo se escribe la hora del servidor de la colección que cambió.
@@ -223,15 +256,17 @@ service cloud.firestore {
 
       match /cuotas/{cuotaId} {
         allow read: if enMiUnidad(unidadDelElemento(elementoId));
-        allow create: if cuotaValida(request.resource.data, unidadDelElemento(elementoId)) &&
-          enMiUnidad(unidadDelElemento(elementoId));
+        allow create: if restaurandoRespaldo() ||
+          (cuotaValida(request.resource.data, unidadDelElemento(elementoId)) &&
+            enMiUnidad(unidadDelElemento(elementoId)));
         // Un pago mal registrado no se edita. Solo un Admin puede borrarlo
         // (rastro de auditoría) y luego se vuelve a capturar. Única excepción
         // de edición: un Admin puede agregar el campo "unidad" a cuotas
         // anteriores (migración de datos).
-        allow update: if esAdmin() &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["unidad"]) &&
-          request.resource.data.unidad == unidadDelElemento(elementoId);
+        allow update: if restaurandoRespaldo() ||
+          (esAdmin() &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["unidad"]) &&
+            request.resource.data.unidad == unidadDelElemento(elementoId));
         allow delete: if esAdmin();
       }
 
@@ -239,18 +274,20 @@ service cloud.firestore {
         allow read: if enMiUnidad(unidadDelElemento(elementoId));
 
         // Un pedido nace sin pagos: el saldo es el precio completo.
-        allow create: if pedidoValido(request.resource.data, unidadDelElemento(elementoId)) &&
-          "unidad" in request.resource.data &&
-          enMiUnidad(unidadDelElemento(elementoId)) &&
-          request.resource.data.precioTotal >= 0 &&
-          request.resource.data.saldoPendiente == request.resource.data.precioTotal &&
-          !("ultimoAbonoId" in request.resource.data);
+        allow create: if restaurandoRespaldo() ||
+          (pedidoValido(request.resource.data, unidadDelElemento(elementoId)) &&
+            "unidad" in request.resource.data &&
+            enMiUnidad(unidadDelElemento(elementoId)) &&
+            request.resource.data.precioTotal >= 0 &&
+            request.resource.data.saldoPendiente == request.resource.data.precioTotal &&
+            !("ultimoAbonoId" in request.resource.data));
 
-        allow update: if pedidoValido(request.resource.data, unidadDelElemento(elementoId)) &&
-          enMiUnidad(unidadDelElemento(elementoId)) &&
-          pedidoSoloCambiaPermitido(resource.data, request.resource.data) &&
-          (request.resource.data.saldoPendiente == resource.data.saldoPendiente ||
-            saldoBajaPorAbono(elementoId, pedidoId, resource.data, request.resource.data));
+        allow update: if restaurandoRespaldo() ||
+          (pedidoValido(request.resource.data, unidadDelElemento(elementoId)) &&
+            enMiUnidad(unidadDelElemento(elementoId)) &&
+            pedidoSoloCambiaPermitido(resource.data, request.resource.data) &&
+            (request.resource.data.saldoPendiente == resource.data.saldoPendiente ||
+              saldoBajaPorAbono(elementoId, pedidoId, resource.data, request.resource.data)));
 
         // Un pedido sin pagos (saldo = precio) lo puede borrar cualquiera de
         // la Unidad, p. ej. uno capturado por error. Si ya tiene pagos, solo
@@ -275,18 +312,20 @@ service cloud.firestore {
 
           // Un abono solo se crea junto con el descuento exacto en el saldo
           // del pedido (ver saldoBajaPorAbono).
-          allow create: if abonoValido(request.resource.data, unidadDelElemento(elementoId)) &&
-            enMiUnidad(unidadDelElemento(elementoId)) &&
-            getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.get("ultimoAbonoId", "") == abonoId &&
-            getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente ==
-              get(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente - request.resource.data.monto;
+          allow create: if restaurandoRespaldo() ||
+            (abonoValido(request.resource.data, unidadDelElemento(elementoId)) &&
+              enMiUnidad(unidadDelElemento(elementoId)) &&
+              getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.get("ultimoAbonoId", "") == abonoId &&
+              getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente ==
+                get(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente - request.resource.data.monto);
 
           // Los abonos no se editan y solo un Admin los borra (al eliminar un
           // pedido que ya tenía pagos). Única excepción de edición: un Admin
           // puede agregar el campo "unidad" a abonos anteriores (migración).
-          allow update: if esAdmin() &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(["unidad"]) &&
-            request.resource.data.unidad == unidadDelElemento(elementoId);
+          allow update: if restaurandoRespaldo() ||
+            (esAdmin() &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly(["unidad"]) &&
+              request.resource.data.unidad == unidadDelElemento(elementoId));
           allow delete: if esAdmin();
         }
       }
