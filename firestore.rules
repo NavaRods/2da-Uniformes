@@ -247,8 +247,13 @@ service cloud.firestore {
           "articulo", "productoNombre", "talla", "color", "cantidad",
           "precioTotal", "saldoPendiente", "entregado", "quienEntrego",
           "fechaEntrega", "cambioPendiente", "motivoCambio",
-          "fechaCambioSolicitado", "ultimoAbonoId", "creadoEn", "unidad"
+          "fechaCambioSolicitado", "ultimoAbonoId", "creadoEn", "unidad",
+          "actualizadoEn"
         ]) &&
+        // Hora del servidor de esta escritura: los pedidos de una Unidad se
+        // sincronizan por cambios (src/lib/sincronia.js), igual que los
+        // elementos, así que ninguna escritura puede omitirla.
+        datos.actualizadoEn == request.time &&
         (!("unidad" in datos) || datos.unidad == unidadElemento) &&
         datos.articulo is string &&
         datos.precioTotal is number &&
@@ -277,7 +282,7 @@ service cloud.firestore {
         return despues.diff(antes).affectedKeys().hasOnly([
           "entregado", "quienEntrego", "fechaEntrega",
           "cambioPendiente", "motivoCambio", "fechaCambioSolicitado",
-          "saldoPendiente", "ultimoAbonoId", "unidad"
+          "saldoPendiente", "ultimoAbonoId", "unidad", "actualizadoEn"
         ]);
       }
 
@@ -332,9 +337,11 @@ service cloud.firestore {
 
         // Un pedido sin pagos (saldo = precio) lo puede borrar cualquiera de
         // la Unidad, p. ej. uno capturado por error. Si ya tiene pagos, solo
-        // un Admin.
+        // un Admin. Siempre junto con su baja (bajasPedidos), para que los
+        // demás dispositivos se enteren del borrado.
         allow delete: if puedeEscribirUnidad(unidadDelElemento(elementoId)) &&
-          (esAdmin() || resource.data.saldoPendiente == resource.data.precioTotal);
+          (esAdmin() || resource.data.saldoPendiente == resource.data.precioTotal) &&
+          existsAfter(/databases/$(database)/documents/bajasPedidos/$(elementoId + "_" + pedidoId));
 
         // --- Abonos de un pedido ---
         function abonoValido(datos, unidadElemento) {
@@ -446,6 +453,21 @@ service cloud.firestore {
 
     match /{path=**}/pedidos/{pedidoId} {
       allow read: if puedeVerUnidad(resource.data.unidad);
+    }
+
+    // --- Bajas de pedidos (ver eliminarPedido en src/lib/pedidos.js) ---
+    // Constancia de un pedido borrado, para que los demás dispositivos (que
+    // sincronizan por cambios y no ven los borrados) lo quiten. Solo se crea
+    // en el mismo lote en que se borra ese pedido, por quien puede borrarlo.
+    match /bajasPedidos/{bajaId} {
+      allow read: if puedeVerUnidad(resource.data.unidad);
+      allow create: if request.resource.data.keys().hasOnly(["unidad", "elementoId", "pedidoId", "en"]) &&
+        bajaId == request.resource.data.elementoId + "_" + request.resource.data.pedidoId &&
+        request.resource.data.en == request.time &&
+        request.resource.data.unidad == unidadDelElemento(request.resource.data.elementoId) &&
+        puedeEscribirUnidad(request.resource.data.unidad) &&
+        exists(/databases/$(database)/documents/elementos/$(request.resource.data.elementoId)/pedidos/$(request.resource.data.pedidoId)) &&
+        !existsAfter(/databases/$(database)/documents/elementos/$(request.resource.data.elementoId)/pedidos/$(request.resource.data.pedidoId));
     }
 
     match /{path=**}/porUnidad/{unidadId} {

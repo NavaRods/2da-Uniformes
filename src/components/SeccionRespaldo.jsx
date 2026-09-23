@@ -144,13 +144,20 @@ export default function SeccionRespaldo() {
 
   const restaurarAhora = () =>
     ejecutar(async () => {
-      const hechos = await restaurar(abierto, {
+      const { escritos, omitidos } = await restaurar(abierto, {
         por: user.email,
         nombre: abierto.nombre,
         alAvanzar: (n, total) => setOcupado(`Restaurando… ${n} de ${total}`),
       });
       setAbierto(null);
-      setAviso({ tipo: "ok", texto: `Restauración terminada: ${hechos} documentos.` });
+      setAviso({
+        tipo: "ok",
+        texto:
+          omitidos.length === 0
+            ? `Restauración terminada: ${escritos} documentos.`
+            : `Restauración terminada: ${escritos} documentos. ${omitidos.length} no se restauraron:`,
+        detalles: omitidos.map((o) => `${o.ruta} — ${o.motivo}`),
+      });
     });
 
   if (config === undefined) return <p className="nota">Cargando...</p>;
@@ -164,6 +171,13 @@ export default function SeccionRespaldo() {
         <div className="estado-respaldo" role="status" aria-live="polite">
           {ocupado && <p className="nota">⏳ {ocupado}</p>}
           {aviso && <p className={aviso.tipo === "ok" ? "success-msg" : "error"}>{aviso.texto}</p>}
+          {aviso?.detalles?.length > 0 && (
+            <ul className="nota lista-omitidos">
+              {aviso.detalles.map((d) => (
+                <li key={d}>{d}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

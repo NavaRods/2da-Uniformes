@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getDocs,
+  serverTimestamp,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
@@ -68,7 +69,7 @@ export async function migrarDatosAnteriores() {
     const pedidos = await getDocs(collection(db, ...base, "pedidos"));
     for (const pedido of pedidos.docs) {
       if (pedido.data().unidad !== unidad) {
-        await lotes.agregar((l) => l.update(pedido.ref, { unidad }));
+        await lotes.agregar((l) => l.update(pedido.ref, { unidad, actualizadoEn: serverTimestamp() }));
         resumen.pedidos += 1;
       }
       const abonos = await getDocs(collection(db, ...base, "pedidos", pedido.id, "abonos"));

@@ -7,6 +7,12 @@ vi.mock("firebase/firestore", () => ({
   getDocsFromCache: (...args) => getDocsFromCache(...args),
 }));
 vi.mock("./elementos", () => ({ listenElementos: vi.fn() }));
+vi.mock("../firebase", () => ({ db: {} }));
+vi.mock("./pedidos", async () => {
+  // sinBorrados es lógica pura: se usa la real.
+  const { sinBorrados } = await vi.importActual("./pedidos");
+  return { listenPedidosDeUnidad: vi.fn(), listenBajasPedidos: vi.fn(), sinBorrados };
+});
 vi.mock("./catalogo", () => ({ consultaCatalogo: vi.fn() }));
 vi.mock("./unidades", () => ({ consultaUnidades: vi.fn(), compararUnidades: vi.fn() }));
 vi.mock("./gradosDb", () => ({ consultaGrados: vi.fn() }));
@@ -19,7 +25,9 @@ vi.mock("./versiones", () => ({
 }));
 vi.mock("react", () => ({ useSyncExternalStore: vi.fn(), useMemo: vi.fn() }));
 
-const { crearFuente, escucharVersionada } = await import("./fuentes");
+const { crearFuente, escucharVersionada, juntarFuentes, escucharPedidosVigentes } = await import(
+  "./fuentes"
+);
 
 function fuenteFalsa() {
   const cerrar = vi.fn();
@@ -157,5 +165,54 @@ describe("escucharVersionada", () => {
     emitir({ datos: { catalogo: { ms: 7 }, grados: null }, pendiente: true });
     await esperar();
     expect(getDocsFromCache).not.toHaveBeenCalled();
+  });
+});
+
+describe("juntarFuentes", () => {
+  it("es null hasta que cargan todas y luego une sus listas", () => {
+    const a = fuenteFalsa();
+    const b = fuenteFalsa();
+    const junta = juntarFuentes([crearFuente(a.escuchar, 1000), crearFuente(b.escuchar, 1000)]);
+    junta.suscribir(() => {});
+    a.emitir([1, 2]);
+    expect(junta.leer()).toBeNull();
+    b.emitir([3]);
+    expect(junta.leer()).toEqual([1, 2, 3]);
+  });
+
+  it("devuelve la misma lista mientras nada cambie (y una nueva si algo cambia)", () => {
+    const a = fuenteFalsa();
+    const junta = juntarFuentes([crearFuente(a.escuchar, 1000)]);
+    junta.suscribir(() => {});
+    a.emitir([1]);
+    const primera = junta.leer();
+    expect(junta.leer()).toBe(primera);
+    a.emitir([1, 2]);
+    expect(junta.leer()).not.toBe(primera);
+  });
+
+  it("sin fuentes es una lista vacía estable", () => {
+    const junta = juntarFuentes([]);
+    expect(junta.leer()).toEqual([]);
+    expect(junta.leer()).toBe(junta.leer());
+  });
+});
+
+describe("escucharPedidosVigentes", () => {
+  it("espera pedidos y bajas, y quita los pedidos borrados", () => {
+    let darPedidos;
+    let darBajas;
+    const recibido = vi.fn();
+    escucharPedidosVigentes("U1", recibido, {
+      pedidos: (cb) => ((darPedidos = cb), () => {}),
+      bajas: (cb) => ((darBajas = cb), () => {}),
+    });
+    darPedidos([
+      { id: "p1", elementoId: "e1" },
+      { id: "p2", elementoId: "e1" },
+    ]);
+    expect(recibido).not.toHaveBeenCalled();
+    darBajas([{ id: "e1_p1", en: { toMillis: () => 5 } }]);
+    expect(recibido).toHaveBeenLastCalledWith([{ id: "p2", elementoId: "e1" }]);
   });
 });

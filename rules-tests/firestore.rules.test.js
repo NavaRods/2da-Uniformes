@@ -110,7 +110,26 @@ async function abonar(db, { monto, saldoNuevo, id = "ab1", pedido = "ped1" }) {
     quienRecibio: "Ana",
     fechaLocal: "2026-09-02",
   });
-  batch.update(pedidoRef(db, pedido), { saldoPendiente: saldoNuevo, ultimoAbonoId: id });
+  batch.update(pedidoRef(db, pedido), {
+    saldoPendiente: saldoNuevo,
+    ultimoAbonoId: id,
+    ...ahora(),
+  });
+  return batch.commit();
+}
+
+// Borrar un pedido junto con su baja, como hace eliminarPedido en la app.
+function borrarPedido(db, id, { unidad = "A", conBaja = true } = {}) {
+  const batch = writeBatch(db);
+  batch.delete(pedidoRef(db, id));
+  if (conBaja) {
+    batch.set(doc(db, "bajasPedidos", `el1_${id}`), {
+      unidad,
+      elementoId: "el1",
+      pedidoId: id,
+      en: serverTimestamp(),
+    });
+  }
   return batch.commit();
 }
 
@@ -210,23 +229,23 @@ describe("abonos: el dinero no se puede manipular", () => {
   });
 
   it("bajar el saldo a mano, sin abono, se rechaza", async () => {
-    await assertFails(updateDoc(pedidoRef(como(OP_A)), { saldoPendiente: 0 }));
+    await assertFails(updateDoc(pedidoRef(como(OP_A)), { saldoPendiente: 0, ...ahora() }));
   });
 
   it("bajar el saldo apuntando a un abono que no existe se rechaza", async () => {
     await assertFails(
-      updateDoc(pedidoRef(como(OP_A)), { saldoPendiente: 100, ultimoAbonoId: "fantasma" })
+      updateDoc(pedidoRef(como(OP_A)), { saldoPendiente: 100, ultimoAbonoId: "fantasma", ...ahora() })
     );
   });
 
   it("reutilizar un abono viejo para justificar otra baja de saldo se rechaza", async () => {
     await assertFails(
-      updateDoc(pedidoRef(como(OP_A)), { saldoPendiente: 100, ultimoAbonoId: "ab0" })
+      updateDoc(pedidoRef(como(OP_A)), { saldoPendiente: 100, ultimoAbonoId: "ab0", ...ahora() })
     );
   });
 
   it("subir el saldo se rechaza", async () => {
-    await assertFails(updateDoc(pedidoRef(como(OP_A)), { saldoPendiente: 500 }));
+    await assertFails(updateDoc(pedidoRef(como(OP_A)), { saldoPendiente: 500, ...ahora() }));
   });
 
   it("un abono no se puede editar", async () => {
@@ -236,33 +255,42 @@ describe("abonos: el dinero no se puede manipular", () => {
 
 describe("pedidos: campos fijos", () => {
   it("no se puede cambiar el precio total", async () => {
-    await assertFails(updateDoc(pedidoRef(como(OP_A), "pedLimpio"), { precioTotal: 1 }));
+    await assertFails(updateDoc(pedidoRef(como(OP_A), "pedLimpio"), { precioTotal: 1, ...ahora() }));
   });
 
   it("no se puede cambiar creadoEn", async () => {
-    await assertFails(updateDoc(pedidoRef(como(OP_A), "pedLimpio"), { creadoEn: new Date() }));
+    await assertFails(updateDoc(pedidoRef(como(OP_A), "pedLimpio"), { creadoEn: new Date(), ...ahora() }));
   });
 
   it("no se puede cambiar el artículo", async () => {
-    await assertFails(updateDoc(pedidoRef(como(OP_A), "pedLimpio"), { articulo: "Otro" }));
+    await assertFails(updateDoc(pedidoRef(como(OP_A), "pedLimpio"), { articulo: "Otro", ...ahora() }));
   });
 
   it("sí se puede marcar entregado y pedir un cambio", async () => {
     const db = como(OP_A);
     await assertSucceeds(
-      updateDoc(pedidoRef(db, "pedLimpio"), { entregado: true, quienEntrego: "Ana" })
+      updateDoc(pedidoRef(db, "pedLimpio"), { entregado: true, quienEntrego: "Ana", ...ahora() })
     );
     await assertSucceeds(
-      updateDoc(pedidoRef(db, "pedLimpio"), { cambioPendiente: true, motivoCambio: "Talla" })
+      updateDoc(pedidoRef(db, "pedLimpio"), { cambioPendiente: true, motivoCambio: "Talla", ...ahora() })
     );
   });
 
   it("un pedido nuevo debe nacer con saldo igual al precio", async () => {
     const db = como(OP_A);
     const nuevo = (extra) =>
-      setDoc(doc(db, "elementos", "el1", "pedidos", "nuevo"), { ...pedidoBase, ...extra });
+      setDoc(doc(db, "elementos", "el1", "pedidos", "nuevo"), { ...pedidoBase, ...ahora(), ...extra });
     await assertSucceeds(nuevo({}));
     await assertFails(nuevo({ saldoPendiente: 0 }));
+  });
+
+  it("toda escritura en un pedido debe llevar la hora del servidor", async () => {
+    const db = como(OP_A);
+    await assertFails(updateDoc(pedidoRef(db, "pedLimpio"), { entregado: true }));
+    await assertFails(
+      updateDoc(pedidoRef(db, "pedLimpio"), { entregado: true, actualizadoEn: Timestamp.fromMillis(0) })
+    );
+    await assertFails(setDoc(doc(db, "elementos", "el1", "pedidos", "otro"), pedidoBase));
   });
 });
 
@@ -282,16 +310,41 @@ describe("borrados", () => {
   });
 
   it("un Operador NO borra un pedido que ya tiene pagos; un Admin sí", async () => {
-    await assertFails(deleteDoc(pedidoRef(como(OP_A), "ped1")));
-    await assertSucceeds(deleteDoc(pedidoRef(como(ADMIN), "ped1")));
+    await assertFails(borrarPedido(como(OP_A), "ped1"));
+    await assertSucceeds(borrarPedido(como(ADMIN), "ped1"));
   });
 
   it("un Operador sí borra un pedido sin pagos de su Unidad", async () => {
-    await assertSucceeds(deleteDoc(pedidoRef(como(OP_A), "pedLimpio")));
+    await assertSucceeds(borrarPedido(como(OP_A), "pedLimpio"));
   });
 
   it("un Operador de otra Unidad NO borra un pedido sin pagos", async () => {
-    await assertFails(deleteDoc(pedidoRef(como(OP_B), "pedLimpio")));
+    await assertFails(borrarPedido(como(OP_B), "pedLimpio"));
+  });
+
+  it("borrar un pedido sin dejar su baja se rechaza", async () => {
+    await assertFails(borrarPedido(como(ADMIN), "pedLimpio", { conBaja: false }));
+    await assertFails(deleteDoc(pedidoRef(como(ADMIN), "pedLimpio")));
+  });
+
+  it("una baja solo vale junto con el borrado real del pedido", async () => {
+    const db = como(OP_A);
+    await assertFails(
+      setDoc(doc(db, "bajasPedidos", "el1_pedLimpio"), {
+        unidad: "A",
+        elementoId: "el1",
+        pedidoId: "pedLimpio",
+        en: serverTimestamp(),
+      })
+    );
+    // La Unidad de la baja debe ser la del elemento.
+    await assertFails(borrarPedido(como(ADMIN), "pedLimpio", { unidad: "B" }));
+  });
+
+  it("las bajas se leen por Unidad", async () => {
+    await borrarPedido(como(OP_A), "pedLimpio");
+    await assertSucceeds(getDoc(doc(como(OP_A), "bajasPedidos", "el1_pedLimpio")));
+    await assertFails(getDoc(doc(como(OP_B), "bajasPedidos", "el1_pedLimpio")));
   });
 
   it("un Operador NO borra un elemento; un Admin sí", async () => {

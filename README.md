@@ -134,6 +134,10 @@ al día):
 - **Elementos**: solo se descargan los que cambiaron desde la última vez
   (campo `actualizadoEn`). La lista completa de una Unidad se vuelve a
   descargar una vez por semana por dispositivo.
+- **Pedidos**: igual que los elementos, por Unidad. De ahí salen las pestañas
+  Pendientes, Por elemento y Cambios de la Relación de pagos y los pedidos del
+  perfil de cada elemento, sin volver a leerlos. Al borrar un pedido queda una
+  baja en `bajasPedidos` para que los demás dispositivos también lo quiten.
 - **Número de WhatsApp**: una sola lectura compartida por todas las pantallas.
 - Los conteos (elementos por Unidad, uso de un grado) usan consultas de
   conteo: 1 lectura por cada 1,000 documentos.

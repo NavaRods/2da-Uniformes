@@ -128,10 +128,11 @@ export function etiquetaDia(yyyyMmDd) {
   });
 }
 
-// --- Pedidos pendientes (vista "Por cobrar / entregar") ---
-// Un pedido está pendiente si aún debe dinero (saldo > 0) o si todavía no se
-// entrega. La consulta trae los dos casos; aquí se convierten en filas
-// comparables y se agregan por elemento.
+// --- Pedidos: pendientes y relación por elemento ---
+// Todo sale de los pedidos de la Unidad (ya en la caché del dispositivo): lo
+// pagado de cada pedido es precio - saldo, sin leer sus abonos.
+
+const milis = (t) => (typeof t?.toMillis === "function" ? t.toMillis() : 0);
 
 export function filaDePedido(pedido) {
   const precio = Number(pedido.precioTotal) || 0;
@@ -139,6 +140,7 @@ export function filaDePedido(pedido) {
   const liquidado = saldoCrudo <= 0;
   // Si el saldo se pasó de 0 (pago de más), lo abonado no supera el precio.
   const pagado = liquidado ? precio : Math.max(precio - saldoCrudo, 0);
+  const entregado = !!pedido.entregado;
   return {
     id: `${pedido.elementoId}/${pedido.id}`,
     elementoId: pedido.elementoId,
@@ -152,12 +154,33 @@ export function filaDePedido(pedido) {
     pagado,
     saldoPendiente: liquidado ? 0 : saldoCrudo,
     liquidado,
-    entregado: !!pedido.entregado,
+    entregado,
+    fechaEntrega: pedido.fechaEntrega || null,
+    quienEntrego: pedido.quienEntrego || "",
     cambioPendiente: !!pedido.cambioPendiente,
+    motivoCambio: pedido.motivoCambio || "",
+    creadoMs: milis(pedido.creadoEn),
     debeDinero: !liquidado,
-    faltaEntregar: !pedido.entregado,
+    faltaEntregar: !entregado,
+    pendiente: !liquidado || !entregado,
     unidad: pedido.unidad || "",
   };
+}
+
+// Porcentaje del precio ya pagado (0 a 100).
+export const porcentajePagado = (f) =>
+  f.precioTotal > 0 ? Math.min(100, Math.round((f.pagado / f.precioTotal) * 100)) : 100;
+
+// Pedidos pendientes (deben dinero o falta entregarlos), primero los de
+// mayor deuda.
+export function pedidosPendientes(filas) {
+  return filas
+    .filter((f) => f.pendiente)
+    .sort(
+      (a, b) =>
+        b.saldoPendiente - a.saldoPendiente ||
+        (a.elementoNombre || "").localeCompare(b.elementoNombre || "", "es")
+    );
 }
 
 export function resumenPendientes(filas) {
@@ -165,6 +188,7 @@ export function resumenPendientes(filas) {
   return {
     pedidos: filas.length,
     elementos: new Set(filas.map((f) => f.elementoId)).size,
+    elementosConDeuda: new Set(filas.filter((f) => f.debeDinero).map((f) => f.elementoId)).size,
     porCobrar: suma((f) => f.saldoPendiente),
     pagado: suma((f) => f.pagado),
     valorTotal: suma((f) => f.precioTotal),
@@ -173,35 +197,76 @@ export function resumenPendientes(filas) {
   };
 }
 
-// Agrupa los pedidos pendientes por elemento (quién debe / a quién le falta
-// la pieza), con el total de esa persona y el peor estado entre sus pedidos.
-export function pendientesPorElemento(filas) {
+// Estado de un elemento respecto a sus uniformes, del más urgente al menos.
+export const ESTADOS_UNIFORME = {
+  debe: "Debe",
+  "sin-entregar": "Falta entregar",
+  "al-corriente": "Al corriente",
+  "sin-pedidos": "Sin uniformes",
+};
+
+function estadoDe(g) {
+  if (g.porCobrar > 0) return "debe";
+  if (g.sinEntregar > 0) return "sin-entregar";
+  if (g.piezas > 0) return "al-corriente";
+  return "sin-pedidos";
+}
+
+// Relación pagos ↔ pedidos por elemento: cada elemento con todos sus pedidos
+// (pagado, saldo, entregado) y sus totales. Incluye a los elementos sin
+// pedidos (aún no compran uniforme) y a los dados de baja solo si tienen
+// pedidos. Un pedido cuyo elemento no está en la lista (p. ej. se cambió de
+// Unidad) aparece igual, con el nombre que traiga. Orden alfabético.
+export function relacionPorElemento(elementos, filas) {
   const grupos = new Map();
+  const nuevo = (id, el) => ({
+    elementoId: id,
+    elementoNombre: el?.nombre || "",
+    gradoMilitar: el?.gradoMilitar || "",
+    baja: !!el?.fechaBaja,
+    pedidos: [],
+    piezas: 0,
+    valorTotal: 0,
+    pagado: 0,
+    porCobrar: 0,
+    sinEntregar: 0,
+    cambios: 0,
+  });
+  for (const el of elementos) grupos.set(el.id, nuevo(el.id, el));
   for (const f of filas) {
-    let g = grupos.get(f.elementoId);
-    if (!g) {
-      g = {
-        elementoId: f.elementoId,
-        elementoNombre: f.elementoNombre,
-        pedidos: [],
-        porCobrar: 0,
-        pagado: 0,
-        valorTotal: 0,
-        conDeuda: 0,
-        sinEntregar: 0,
-      };
-      grupos.set(f.elementoId, g);
-    }
+    if (!grupos.has(f.elementoId)) grupos.set(f.elementoId, nuevo(f.elementoId, null));
+    const g = grupos.get(f.elementoId);
     if (!g.elementoNombre && f.elementoNombre) g.elementoNombre = f.elementoNombre;
     g.pedidos.push(f);
-    g.porCobrar += f.saldoPendiente;
-    g.pagado += f.pagado;
+    g.piezas += 1;
     g.valorTotal += f.precioTotal;
-    if (f.debeDinero) g.conDeuda += 1;
+    g.pagado += f.pagado;
+    g.porCobrar += f.saldoPendiente;
     if (f.faltaEntregar) g.sinEntregar += 1;
+    if (f.cambioPendiente) g.cambios += 1;
   }
-  return [...grupos.values()].sort(
-    (a, b) => b.porCobrar - a.porCobrar || (b.sinEntregar - a.sinEntregar) ||
-      (a.elementoNombre || "").localeCompare(b.elementoNombre || "", "es")
-  );
+  return [...grupos.values()]
+    .filter((g) => !(g.baja && g.piezas === 0))
+    .map((g) => ({
+      ...g,
+      estado: estadoDe(g),
+      pedidos: g.pedidos.sort((a, b) => b.creadoMs - a.creadoMs),
+    }))
+    .sort((a, b) => (a.elementoNombre || "").localeCompare(b.elementoNombre || "", "es"));
+}
+
+export function resumenRelacion(grupos) {
+  const cuenta = (estado) => grupos.filter((g) => g.estado === estado).length;
+  const suma = (f) => grupos.reduce((s, g) => s + f(g), 0);
+  return {
+    elementos: grupos.length,
+    deben: cuenta("debe"),
+    faltaEntregar: grupos.filter((g) => g.sinEntregar > 0).length,
+    alCorriente: cuenta("al-corriente"),
+    sinPedidos: cuenta("sin-pedidos"),
+    porCobrar: suma((g) => g.porCobrar),
+    pagado: suma((g) => g.pagado),
+    valorTotal: suma((g) => g.valorTotal),
+    piezasSinEntregar: suma((g) => g.sinEntregar),
+  };
 }

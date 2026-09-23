@@ -123,7 +123,7 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
     }
     setError("");
     try {
-      await eliminarPedido(elemento.id, pedido.id);
+      await eliminarPedido(elemento.id, pedido.id, pedido.unidad || elemento.unidad);
     } catch {
       setError("No se pudo eliminar. Verifica tu conexión e inténtalo de nuevo.");
     }

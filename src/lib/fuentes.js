@@ -1,6 +1,7 @@
-import { useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { getDocsFromCache } from "firebase/firestore";
 import { listenElementos } from "./elementos";
+import { listenBajasPedidos, listenPedidosDeUnidad, sinBorrados } from "./pedidos";
 import { consultaCatalogo } from "./catalogo";
 import { consultaUnidades, compararUnidades } from "./unidades";
 import { consultaGrados } from "./gradosDb";
@@ -121,12 +122,44 @@ const usuarios = crearFuente(escucharVersionada("usuarios", consultaUsuarios, li
 // Un solo documento: se escucha una vez para todas las pantallas que lo usan.
 const configuracion = crearFuente((cb) => listenConfiguracion(cb, () => cb({})));
 const elementosPorUnidad = new Map();
+const pedidosPorUnidad = new Map();
 
 function fuenteElementos(unidad) {
   if (!elementosPorUnidad.has(unidad)) {
     elementosPorUnidad.set(unidad, crearFuente((cb) => listenElementos(cb, unidad)));
   }
   return elementosPorUnidad.get(unidad);
+}
+
+// Pedidos de una Unidad sin los borrados: junta los pedidos y sus bajas, y
+// entrega en cuanto ambos cargaron.
+export function escucharPedidosVigentes(unidad, callback, escuchar = {}) {
+  const { pedidos: oirPedidos = listenPedidosDeUnidad, bajas: oirBajas = listenBajasPedidos } =
+    escuchar;
+  let pedidos = null;
+  let bajas = null;
+  const entregar = () => {
+    if (pedidos && bajas) callback(sinBorrados(pedidos, bajas));
+  };
+  const dejarPedidos = oirPedidos((lista) => {
+    pedidos = lista;
+    entregar();
+  }, unidad);
+  const dejarBajas = oirBajas((lista) => {
+    bajas = lista;
+    entregar();
+  }, unidad);
+  return () => {
+    dejarPedidos();
+    dejarBajas();
+  };
+}
+
+function fuentePedidos(unidad) {
+  if (!pedidosPorUnidad.has(unidad)) {
+    pedidosPorUnidad.set(unidad, crearFuente((cb) => escucharPedidosVigentes(unidad, cb)));
+  }
+  return pedidosPorUnidad.get(unidad);
 }
 
 // Al cerrar sesión se cierran todos los listeners: los datos son de esa cuenta.
@@ -139,6 +172,8 @@ export function reiniciarFuentes() {
   versiones.detener();
   elementosPorUnidad.forEach((f) => f.detener());
   elementosPorUnidad.clear();
+  pedidosPorUnidad.forEach((f) => f.detener());
+  pedidosPorUnidad.clear();
 }
 
 const VACIA = { suscribir: () => () => {}, leer: () => SIN_DATOS };
@@ -150,6 +185,44 @@ function useFuente(fuente) {
 
 // Elementos de una Unidad. Sin Unidad (Admin que aún no elige) no lee nada.
 export const useElementos = (unidad) => useFuente(unidad ? fuenteElementos(unidad) : null);
+
+// Junta varias fuentes (una por Unidad) en una sola lista. null mientras
+// alguna no ha cargado. La lista se reutiliza mientras no cambie ninguna
+// parte (useSyncExternalStore exige la misma referencia si nada cambió).
+export function juntarFuentes(fuentes) {
+  let previo = null;
+  return {
+    suscribir(alCambiar) {
+      const dejar = fuentes.map((f) => f.suscribir(alCambiar));
+      return () => dejar.forEach((d) => d());
+    },
+    leer() {
+      const partes = fuentes.map((f) => f.leer());
+      if (partes.some((p) => p === SIN_DATOS)) return null;
+      if (previo && partes.length === previo.partes.length && partes.every((p, i) => p === previo.partes[i])) {
+        return previo.valor;
+      }
+      previo = { partes, valor: partes.flat() };
+      return previo.valor;
+    },
+  };
+}
+
+function useDeUnidades(obtenerFuente, unidadesPedidas) {
+  const clave = unidadesPedidas.join("\u0000");
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `clave` resume la lista
+  const junta = useMemo(() => juntarFuentes(unidadesPedidas.map(obtenerFuente)), [clave]);
+  const suscribir = useCallback((alCambiar) => junta.suscribir(alCambiar), [junta]);
+  const leer = useCallback(() => junta.leer(), [junta]);
+  return useSyncExternalStore(suscribir, leer);
+}
+
+// Elementos o pedidos de varias Unidades juntos (p. ej. "Todas las
+// Unidades" en la Relación de pagos). null mientras cargan.
+export const useElementosDeUnidades = (unidadesPedidas) =>
+  useDeUnidades(fuenteElementos, unidadesPedidas);
+export const usePedidosDeUnidades = (unidadesPedidas) =>
+  useDeUnidades(fuentePedidos, unidadesPedidas);
 export const useCatalogo = () => useFuente(catalogo);
 // `activo` en false evita suscribirse (p. ej. un Operador no necesita la lista).
 export const useUnidades = (activo = true) => useFuente(activo ? unidades : null);

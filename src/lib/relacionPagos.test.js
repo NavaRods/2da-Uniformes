@@ -7,7 +7,10 @@ import {
   ordenarPorHora,
   resumenDia,
   resumenPendientes,
-  pendientesPorElemento,
+  pedidosPendientes,
+  relacionPorElemento,
+  resumenRelacion,
+  porcentajePagado,
   moverDia,
 } from "./relacionPagos";
 
@@ -180,7 +183,7 @@ describe("filaDePedido", () => {
   });
 });
 
-describe("resumenPendientes y pendientesPorElemento", () => {
+describe("pendientes", () => {
   const filas = [
     filaDePedido({
       id: "p1", elementoId: "e1", elementoNombre: "Ana",
@@ -194,36 +197,95 @@ describe("resumenPendientes y pendientesPorElemento", () => {
       id: "p3", elementoId: "e2", elementoNombre: "Luis",
       articulo: "Pantalón", precioTotal: 200, saldoPendiente: 200, entregado: false,
     }),
+    filaDePedido({
+      id: "p4", elementoId: "e3", elementoNombre: "Eva",
+      articulo: "Botas", precioTotal: 400, saldoPendiente: 0, entregado: false,
+    }),
   ];
 
-  it("suma lo por cobrar, lo pagado y cuenta deudas y entregas", () => {
-    expect(resumenPendientes(filas)).toMatchObject({
+  it("solo deja lo que debe dinero o falta entregar, primero la mayor deuda", () => {
+    expect(pedidosPendientes(filas).map((f) => f.pedidoId)).toEqual(["p3", "p1", "p4"]);
+  });
+
+  it("suma lo por cobrar y cuenta deudas, entregas y elementos que deben", () => {
+    expect(resumenPendientes(pedidosPendientes(filas))).toMatchObject({
       pedidos: 3,
-      elementos: 2,
+      elementos: 3,
+      elementosConDeuda: 2,
       porCobrar: 320,
-      pagado: 230,
-      valorTotal: 550,
       conDeuda: 2,
-      sinEntregar: 2,
+      sinEntregar: 3,
     });
   });
 
-  it("agrupa por elemento y ordena primero a quien más debe", () => {
-    const grupos = pendientesPorElemento(filas);
-    expect(grupos.map((g) => g.elementoId)).toEqual(["e2", "e1"]);
-    expect(grupos[1]).toMatchObject({
-      elementoNombre: "Ana",
-      porCobrar: 120,
-      pagado: 230,
-      valorTotal: 350,
-      conDeuda: 1,
-      sinEntregar: 1,
-    });
-    expect(grupos[1].pedidos).toHaveLength(2);
-  });
-
-  it("una lista vacía da ceros y ningún grupo", () => {
+  it("una lista vacía da ceros", () => {
     expect(resumenPendientes([])).toMatchObject({ pedidos: 0, porCobrar: 0, conDeuda: 0 });
-    expect(pendientesPorElemento([])).toEqual([]);
+  });
+
+  it("porcentaje pagado", () => {
+    expect(porcentajePagado(filas[0])).toBe(60);
+    expect(porcentajePagado({ pagado: 0, precioTotal: 0 })).toBe(100);
+  });
+});
+
+describe("relacionPorElemento", () => {
+  const ts = (ms) => ({ toMillis: () => ms });
+  const elementos = [
+    { id: "e1", nombre: "Beto" },
+    { id: "e2", nombre: "Ana" },
+    { id: "e3", nombre: "Carla" },
+    { id: "e4", nombre: "Dani" },
+    { id: "e5", nombre: "Eli", fechaBaja: "2026-09-01" },
+  ];
+  const filas = [
+    { id: "a", elementoId: "e1", precioTotal: 300, saldoPendiente: 100, entregado: true, creadoEn: ts(1) },
+    { id: "b", elementoId: "e1", precioTotal: 50, saldoPendiente: 0, entregado: false, creadoEn: ts(2), cambioPendiente: true },
+    { id: "c", elementoId: "e2", precioTotal: 200, saldoPendiente: 0, entregado: false },
+    { id: "d", elementoId: "e3", precioTotal: 90, saldoPendiente: 0, entregado: true },
+    { id: "e", elementoId: "e9", elementoNombre: "Otro", precioTotal: 10, saldoPendiente: 10, entregado: true },
+  ].map(filaDePedido);
+  const grupos = relacionPorElemento(elementos, filas);
+  const de = (id) => grupos.find((g) => g.elementoId === id);
+
+  it("junta los pedidos de cada elemento con lo pagado, lo que debe y lo sin entregar", () => {
+    expect(de("e1")).toMatchObject({
+      elementoNombre: "Beto",
+      piezas: 2,
+      valorTotal: 350,
+      pagado: 250,
+      porCobrar: 100,
+      sinEntregar: 1,
+      cambios: 1,
+      estado: "debe",
+    });
+    // Del pedido más nuevo al más viejo.
+    expect(de("e1").pedidos.map((f) => f.pedidoId)).toEqual(["b", "a"]);
+  });
+
+  it("clasifica: debe, falta entregar, al corriente y sin uniformes", () => {
+    expect(de("e2").estado).toBe("sin-entregar");
+    expect(de("e3").estado).toBe("al-corriente");
+    expect(de("e4").estado).toBe("sin-pedidos");
+  });
+
+  it("una baja sin pedidos no aparece; un pedido de un elemento desconocido sí", () => {
+    expect(de("e5")).toBeUndefined();
+    expect(de("e9")).toMatchObject({ elementoNombre: "Otro", porCobrar: 10 });
+  });
+
+  it("ordena por nombre", () => {
+    expect(grupos.map((g) => g.elementoNombre)).toEqual(["Ana", "Beto", "Carla", "Dani", "Otro"]);
+  });
+
+  it("resume cuántos deben, a cuántos les falta entregar, etc.", () => {
+    expect(resumenRelacion(grupos)).toMatchObject({
+      elementos: 5,
+      deben: 2,
+      faltaEntregar: 2,
+      alCorriente: 1,
+      sinPedidos: 1,
+      porCobrar: 110,
+      piezasSinEntregar: 2,
+    });
   });
 });

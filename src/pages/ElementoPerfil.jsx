@@ -1,16 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation, Link } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { actualizarElemento } from "../lib/elementos";
 import { darDeBaja, reactivarElemento } from "../lib/asistencia";
-import {
-  listenPedidosDeElemento,
-  crearPedido,
-  registrarAbono,
-} from "../lib/pedidos";
+import { crearPedido, registrarAbono } from "../lib/pedidos";
 import { requiereTalla, TALLA_TIPO } from "../lib/catalogo";
-import { useElementos, useCatalogo } from "../lib/fuentes";
+import { useElementos, useCatalogo, usePedidosDeUnidades } from "../lib/fuentes";
 import { vigilar } from "../lib/estadoFirestore";
 import { useAuth } from "../auth/AuthContext";
 import { veTodasLasUnidades, esSoloLectura } from "../lib/roles";
@@ -25,7 +21,6 @@ export default function ElementoPerfil() {
   const { user, perfil } = useAuth();
   const { state } = useLocation();
   const [directo, setDirecto] = useState(null);
-  const [pedidos, setPedidos] = useState([]);
   const catalogo = useCatalogo();
   const [productoId, setProductoId] = useState("");
   const [talla, setTalla] = useState("");
@@ -58,7 +53,17 @@ export default function ElementoPerfil() {
   }, [elementoId, buscarDirecto]);
   const elemento = enLista ?? (directo?.id === elementoId ? directo : null);
 
-  useEffect(() => listenPedidosDeElemento(elementoId, setPedidos), [elementoId]);
+  // Los pedidos salen de los de su Unidad (compartidos con la Relación de
+  // pagos y sincronizados por cambios): abrir otro perfil de la misma Unidad
+  // no cuesta lecturas.
+  const pedidosDeUnidad = usePedidosDeUnidades(elemento?.unidad ? [elemento.unidad] : []);
+  const pedidos = useMemo(
+    () =>
+      (pedidosDeUnidad || [])
+        .filter((p) => p.elementoId === elementoId)
+        .sort((a, b) => (b.creadoEn?.toMillis?.() ?? 0) - (a.creadoEn?.toMillis?.() ?? 0)),
+    [pedidosDeUnidad, elementoId]
+  );
   useEffect(() => listenCuotas(elementoId, setCuotas), [elementoId]);
 
   const producto = catalogo.find((p) => p.id === productoId);

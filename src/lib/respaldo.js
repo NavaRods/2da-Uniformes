@@ -4,14 +4,17 @@ import {
   doc,
   getDoc,
   getDocsFromServer,
+  query,
   serverTimestamp,
   setDoc,
   Timestamp,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { marcarCambios, COLECCIONES_VERSIONADAS } from "./versiones";
 import { normalizarCorreo } from "./usuarios";
+import { ROLES, requiereUnidad } from "./roles";
 import { cifrarTexto, contrasenaCorrecta, crearVerificador, descifrarTexto } from "./cifrado";
 
 // Respaldo completo de la app (solo Admin): se leen todas las colecciones, se
@@ -161,41 +164,99 @@ export async function abrirRespaldo(textoArchivo, contrasena) {
 // Firestore admite 500 escrituras por lote; se dejan de margen las de control.
 export const TAMANO_LOTE = 400;
 
+// Cuentas que las reglas no dejan escribir desde la app, así que restaurarlas
+// solo haría fallar el lote: la propia (nadie se quita el acceso), las de
+// Super Admin (en el respaldo o hoy en la base) y las que no cumplen el
+// formato actual de usuario (p. ej. un rol que ya no existe, como "operador").
+export function motivoParaOmitirUsuario(ruta, datos, { propio, superAdmins }) {
+  if (ruta === propio) return "Es tu propia cuenta";
+  const correo = ruta.split("/")[1];
+  if (datos.rol === "superadmin" || superAdmins.has(correo)) {
+    return "Cuenta de Super Admin (no se modifica desde la app)";
+  }
+  if (!ROLES.includes(datos.rol)) return `Rol "${datos.rol ?? "sin rol"}" que ya no existe`;
+  if (requiereUnidad(datos.rol) && !(typeof datos.unidad === "string" && datos.unidad)) {
+    return "Rol con Unidad, pero sin Unidad asignada";
+  }
+  return null;
+}
+
+async function superAdminsActuales() {
+  const snap = await getDocsFromServer(
+    query(collection(db, "usuarios"), where("rol", "==", "superadmin"))
+  );
+  return new Set(snap.docs.map((d) => d.id));
+}
+
+// Datos listos para escribir. Elementos y pedidos restaurados cuentan como
+// cambio: así los demás dispositivos los vuelven a descargar (ver la
+// sincronización por cambios en lib/sincronia.js).
+function datosParaEscribir(r) {
+  const datos = desdeJSON(r.datos);
+  const segmentos = r.ruta.split("/");
+  const esElemento = segmentos.length === 2 && segmentos[0] === "elementos";
+  const esPedido = segmentos.length === 4 && segmentos[2] === "pedidos";
+  if (esElemento || esPedido) datos.actualizadoEn = serverTimestamp();
+  return datos;
+}
+
+async function escribirLote(registros, { por, nombre }) {
+  const lote = writeBatch(db);
+  const versionadas = new Set();
+  for (const r of registros) {
+    const [coleccion, , subcoleccion] = r.ruta.split("/");
+    if (!subcoleccion && COLECCIONES_VERSIONADAS.includes(coleccion)) versionadas.add(coleccion);
+    lote.set(doc(db, r.ruta), datosParaEscribir(r));
+  }
+  marcarCambios(lote, [...versionadas]);
+  lote.set(doc(db, "meta", "restauracion"), {
+    en: serverTimestamp(),
+    por: normalizarCorreo(por),
+    respaldo: nombre || "",
+  });
+  await lote.commit();
+}
+
 // Vuelve a escribir cada documento del respaldo. Cada lote marca
 // meta/restauracion (quién, cuándo, qué archivo): las reglas solo permiten
 // reescribir pedidos, abonos y mensualidades tal cual si el lote lo trae.
-// El usuario que restaura no se toca a sí mismo (no puede quitarse el acceso).
+// Si las reglas rechazan un lote (basta un documento que ya no cumple el
+// formato actual), ese lote se reintenta documento por documento: se
+// restaura todo lo que se pueda y se informa lo que no.
+// Devuelve { escritos, omitidos: [{ ruta, motivo }] }.
 export async function restaurar({ registros }, { por, nombre, alAvanzar = () => {} }) {
   const propio = `usuarios/${normalizarCorreo(por)}`;
+  const superAdmins = await superAdminsActuales();
+  const omitidos = [];
   const orden = PARTES.map(([parte]) => parte);
   const pendientes = registros
-    .filter((r) => r.ruta !== propio)
+    .filter((r) => {
+      if (r.parte !== "usuarios") return true;
+      const motivo = motivoParaOmitirUsuario(r.ruta, r.datos, { propio, superAdmins });
+      if (motivo) omitidos.push({ ruta: r.ruta, motivo });
+      return !motivo;
+    })
     .sort((a, b) => orden.indexOf(a.parte) - orden.indexOf(b.parte));
 
+  let escritos = 0;
   for (let i = 0; i < pendientes.length; i += TAMANO_LOTE) {
-    const lote = writeBatch(db);
-    const versionadas = new Set();
-    for (const r of pendientes.slice(i, i + TAMANO_LOTE)) {
-      const datos = desdeJSON(r.datos);
-      const segmentos = r.ruta.split("/");
-      // Un elemento restaurado cuenta como cambio: así los demás dispositivos
-      // lo vuelven a descargar (ver sincronización por cambios en elementos.js).
-      if (segmentos.length === 2 && segmentos[0] === "elementos") {
-        datos.actualizadoEn = serverTimestamp();
+    const tramo = pendientes.slice(i, i + TAMANO_LOTE);
+    try {
+      await escribirLote(tramo, { por, nombre });
+      escritos += tramo.length;
+    } catch (error) {
+      if (error?.code !== "permission-denied") throw error;
+      for (const r of tramo) {
+        try {
+          await escribirLote([r], { por, nombre });
+          escritos += 1;
+        } catch (e) {
+          if (e?.code !== "permission-denied") throw e;
+          omitidos.push({ ruta: r.ruta, motivo: "Las reglas actuales no lo aceptan" });
+        }
       }
-      if (segmentos.length === 2 && COLECCIONES_VERSIONADAS.includes(segmentos[0])) {
-        versionadas.add(segmentos[0]);
-      }
-      lote.set(doc(db, r.ruta), datos);
     }
-    marcarCambios(lote, [...versionadas]);
-    lote.set(doc(db, "meta", "restauracion"), {
-      en: serverTimestamp(),
-      por: normalizarCorreo(por),
-      respaldo: nombre || "",
-    });
-    await lote.commit();
     alAvanzar(Math.min(i + TAMANO_LOTE, pendientes.length), pendientes.length);
   }
-  return pendientes.length;
+  return { escritos, omitidos };
 }

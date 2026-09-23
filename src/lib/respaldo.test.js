@@ -9,9 +9,15 @@ class Timestamp {
 }
 
 const lotes = [];
+// Rutas que "las reglas" rechazan: un lote que las incluya falla entero.
+let rechazadas = new Set();
 const writeBatch = vi.fn(() => {
   const lote = { escrituras: [], set: vi.fn((ref, datos) => lote.escrituras.push([ref.path, datos])) };
-  lote.commit = vi.fn(async () => {});
+  lote.commit = vi.fn(async () => {
+    if (lote.escrituras.some(([ruta]) => rechazadas.has(ruta))) {
+      throw Object.assign(new Error("denegado"), { code: "permission-denied" });
+    }
+  });
   lotes.push(lote);
   return lote;
 });
@@ -23,6 +29,8 @@ vi.mock("firebase/firestore", () => ({
   doc: (_db, ...ruta) => ({ path: ruta.join("/") }),
   getDoc: vi.fn(),
   getDocsFromServer: (...args) => getDocsFromServer(...args),
+  query: (ref, ...filtros) => ({ ...ref, filtros }),
+  where: (...args) => args,
   serverTimestamp: () => "SERVER_TIMESTAMP",
   setDoc: vi.fn(),
   Timestamp,
@@ -36,14 +44,35 @@ vi.mock("./versiones", () => ({
   },
 }));
 vi.mock("./usuarios", () => ({ normalizarCorreo: (c) => c.trim().toLowerCase() }));
+vi.mock("./roles", () => ({
+  ROLES: ["admin", "estado_mayor", "responsable", "instructor"],
+  requiereUnidad: (rol) => ["responsable", "instructor"].includes(rol),
+}));
 
-const { aJSON, desdeJSON, reunirDatos, crearArchivo, abrirRespaldo, leerEncabezado, restaurar, TAMANO_LOTE } =
-  await import("./respaldo");
+const {
+  aJSON,
+  desdeJSON,
+  reunirDatos,
+  crearArchivo,
+  abrirRespaldo,
+  leerEncabezado,
+  restaurar,
+  motivoParaOmitirUsuario,
+  TAMANO_LOTE,
+} = await import("./respaldo");
+
+// Super Admins que "hay hoy en la base" (consulta de restaurar).
+let superAdminsHoy = [];
 
 beforeEach(() => {
   lotes.length = 0;
+  rechazadas = new Set();
+  superAdminsHoy = [];
   writeBatch.mockClear();
   getDocsFromServer.mockReset();
+  getDocsFromServer.mockImplementation(async () => ({
+    docs: superAdminsHoy.map((id) => ({ id })),
+  }));
 });
 
 describe("aJSON / desdeJSON", () => {
@@ -127,13 +156,75 @@ describe("restaurar", () => {
     expect(lote.commit).toHaveBeenCalled();
   });
 
+  const usuario = (correo, datos) => reg("usuarios", `usuarios/${correo}`, datos);
+
   it("no toca el usuario de quien restaura (no puede quitarse el acceso)", async () => {
-    const hechos = await restaurar(
-      { registros: [reg("usuarios", "usuarios/admin@x.mx"), reg("usuarios", "usuarios/ana@x.mx")] },
+    const { escritos, omitidos } = await restaurar(
+      { registros: [usuario("admin@x.mx", { rol: "admin" }), usuario("ana@x.mx", { rol: "admin" })] },
       { por: "admin@x.mx", nombre: "" }
     );
-    expect(hechos).toBe(1);
+    expect(escritos).toBe(1);
+    expect(omitidos).toEqual([{ ruta: "usuarios/admin@x.mx", motivo: "Es tu propia cuenta" }]);
     expect(lotes[0].escrituras.map(([r]) => r)).not.toContain("usuarios/admin@x.mx");
+  });
+
+  it("se salta las cuentas de Super Admin (del respaldo o de hoy) y los roles que ya no existen", async () => {
+    superAdminsHoy = ["jefe@x.mx"];
+    const { escritos, omitidos } = await restaurar(
+      {
+        registros: [
+          usuario("sa@x.mx", { rol: "superadmin" }),
+          usuario("jefe@x.mx", { rol: "admin" }),
+          usuario("viejo@x.mx", { rol: "operador", unidad: "U1" }),
+          usuario("ana@x.mx", { rol: "responsable", unidad: "U1" }),
+        ],
+      },
+      { por: "admin@x.mx", nombre: "" }
+    );
+    expect(escritos).toBe(1);
+    expect(omitidos.map((o) => o.ruta)).toEqual([
+      "usuarios/sa@x.mx",
+      "usuarios/jefe@x.mx",
+      "usuarios/viejo@x.mx",
+    ]);
+  });
+
+  it("si las reglas rechazan un lote, restaura el resto documento por documento", async () => {
+    rechazadas = new Set(["elementos/e2"]);
+    const { escritos, omitidos } = await restaurar(
+      {
+        registros: [
+          reg("elementos", "elementos/e1"),
+          reg("elementos", "elementos/e2"),
+          reg("pedidos", "elementos/e1/pedidos/p1"),
+        ],
+      },
+      { por: "a@x.mx", nombre: "" }
+    );
+    expect(escritos).toBe(2);
+    expect(omitidos).toEqual([
+      { ruta: "elementos/e2", motivo: "Las reglas actuales no lo aceptan" },
+    ]);
+  });
+
+  it("un error que no es de permisos sí detiene la restauración", async () => {
+    writeBatch.mockImplementationOnce(() => ({
+      set: vi.fn(),
+      commit: vi.fn(async () => {
+        throw Object.assign(new Error("sin red"), { code: "unavailable" });
+      }),
+    }));
+    await expect(
+      restaurar({ registros: [reg("elementos", "elementos/e1")] }, { por: "a@x.mx", nombre: "" })
+    ).rejects.toMatchObject({ code: "unavailable" });
+  });
+
+  it("los pedidos restaurados también cuentan como cambio (actualizadoEn)", async () => {
+    await restaurar(
+      { registros: [reg("pedidos", "elementos/e1/pedidos/p1", { saldoPendiente: 5 })] },
+      { por: "a@x.mx", nombre: "" }
+    );
+    expect(lotes[0].escrituras[0][1].actualizadoEn).toBe("SERVER_TIMESTAMP");
   });
 
   it("actualiza la versión de las colecciones versionadas que restaura", async () => {
@@ -150,5 +241,22 @@ describe("restaurar", () => {
     await restaurar({ registros }, { por: "a@x.mx", nombre: "", alAvanzar: avance });
     expect(lotes).toHaveLength(2);
     expect(avance).toHaveBeenLastCalledWith(TAMANO_LOTE + 5, TAMANO_LOTE + 5);
+  });
+});
+
+describe("motivoParaOmitirUsuario", () => {
+  const ctx = { propio: "usuarios/yo@x.mx", superAdmins: new Set() };
+
+  it("un usuario válido no se omite", () => {
+    expect(motivoParaOmitirUsuario("usuarios/a@x.mx", { rol: "admin" }, ctx)).toBeNull();
+    expect(
+      motivoParaOmitirUsuario("usuarios/a@x.mx", { rol: "instructor", unidad: "U1" }, ctx)
+    ).toBeNull();
+  });
+
+  it("un Responsable sin Unidad se omite", () => {
+    expect(motivoParaOmitirUsuario("usuarios/a@x.mx", { rol: "responsable" }, ctx)).toMatch(
+      /sin Unidad/
+    );
   });
 });

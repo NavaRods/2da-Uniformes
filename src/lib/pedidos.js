@@ -16,13 +16,57 @@ import {
 import { db } from "../firebase";
 import { vigilar, vigilarEscritura } from "./estadoFirestore";
 import { fechaLocalISO, horaLocalHHMM } from "./format";
+import { escucharPorCambios } from "./sincronia";
 
-export function listenPedidosDeElemento(elementoId, callback) {
-  const ref = collection(db, "elementos", elementoId, "pedidos");
-  const q = query(ref, orderBy("creadoEn", "desc"));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }, vigilar());
+// Como los elementos, cada escritura en un pedido guarda la hora del servidor
+// en "actualizadoEn" (las reglas lo exigen): así los pedidos de una Unidad se
+// sincronizan por cambios (ver lib/sincronia.js) y la Relación de pagos y el
+// perfil los leen de la caché del dispositivo.
+const marcaActualizacion = () => ({ actualizadoEn: serverTimestamp() });
+
+// Al borrar un pedido queda una "baja" (bajasPedidos/{elementoId}_{pedidoId}):
+// la sincronización por cambios no ve los borrados, y sin esto los demás
+// dispositivos seguirían mostrando el pedido (y su deuda) hasta la próxima
+// sincronización completa.
+export const idBajaPedido = (elementoId, pedidoId) => `${elementoId}_${pedidoId}`;
+
+// Pedidos de una Unidad (todas sus piezas, de todos los días), en vivo.
+export function listenPedidosDeUnidad(callback, unidad) {
+  return escucharPorCambios(
+    {
+      clave: `pedidos:${unidad}`,
+      consulta: query(collectionGroup(db, "pedidos"), where("unidad", "==", unidad)),
+      convertir: (d) => ({
+        id: d.id,
+        elementoId: d.ref.parent.parent.id,
+        ...d.data({ serverTimestamps: "estimate" }),
+      }),
+    },
+    callback
+  );
+}
+
+export function listenBajasPedidos(callback, unidad) {
+  return escucharPorCambios(
+    {
+      clave: `bajasPedidos:${unidad}`,
+      consulta: query(collection(db, "bajasPedidos"), where("unidad", "==", unidad)),
+      campo: "en",
+    },
+    callback
+  );
+}
+
+const milis = (t) => (typeof t?.toMillis === "function" ? t.toMillis() : 0);
+
+// Quita los pedidos borrados. Un pedido vuelve a contar si se reescribió
+// después de su baja (p. ej. al restaurar un respaldo).
+export function sinBorrados(pedidos, bajas) {
+  const borradoEn = new Map(bajas.map((b) => [b.id, milis(b.en)]));
+  return pedidos.filter((p) => {
+    const baja = borradoEn.get(idBajaPedido(p.elementoId, p.id));
+    return baja === undefined || milis(p.actualizadoEn) > baja;
+  });
 }
 
 // datos estructurados de la pieza (productoNombre, talla, color, cantidad)
@@ -50,6 +94,7 @@ export async function crearPedido(
     motivoCambio: "",
     fechaCambioSolicitado: null,
     creadoEn: serverTimestamp(),
+    ...marcaActualizacion(),
   }));
 }
 
@@ -61,6 +106,7 @@ export async function marcarEntregado(elementoId, pedidoId, entregado, quienEntr
     entregado,
     fechaEntrega: entregado ? serverTimestamp() : null,
     quienEntrego: entregado ? quienEntrego || "" : "",
+    ...marcaActualizacion(),
   });
 }
 
@@ -77,18 +123,26 @@ export async function marcarCambioPendiente(
     cambioPendiente: pendiente,
     motivoCambio: pendiente ? motivo || "" : "",
     fechaCambioSolicitado: pendiente ? serverTimestamp() : null,
+    ...marcaActualizacion(),
   });
 }
 
 // Elimina un pedido junto con sus abonos (Firestore no borra las
 // subcolecciones solas; si quedaran, seguirían apareciendo en la Relación de
-// pagos como cobros de un pedido que ya no existe).
-export async function eliminarPedido(elementoId, pedidoId) {
+// pagos como cobros de un pedido que ya no existe) y deja su baja para los
+// demás dispositivos. `unidad` es la del elemento.
+export async function eliminarPedido(elementoId, pedidoId, unidad) {
   const abonosRef = collection(db, "elementos", elementoId, "pedidos", pedidoId, "abonos");
   const abonos = await getDocs(abonosRef);
   const batch = writeBatch(db);
   abonos.docs.forEach((d) => batch.delete(d.ref));
   batch.delete(doc(db, "elementos", elementoId, "pedidos", pedidoId));
+  batch.set(doc(db, "bajasPedidos", idBajaPedido(elementoId, pedidoId)), {
+    unidad,
+    elementoId,
+    pedidoId,
+    en: serverTimestamp(),
+  });
   await batch.commit();
 }
 
@@ -163,6 +217,7 @@ export async function registrarAbono(
   lote.update(pedidoRef, {
     saldoPendiente: saldoActual - importe,
     ultimoAbonoId: abonoRef.id,
+    ...marcaActualizacion(),
   });
   await vigilarEscritura(lote.commit());
 }
@@ -188,75 +243,3 @@ export function listenAbonosDelDia(fechaLocal, callback, onError, unidad) {
   }, vigilar(onError));
 }
 
-// Todos los pedidos con un cambio de pieza pendiente (sin importar el día),
-// para que no se pierdan de vista hasta que se resuelvan.
-export function listenCambiosPendientes(callback, onError, unidad) {
-  const ref = collectionGroup(db, "pedidos");
-  const filtros = unidad ? [where("unidad", "==", unidad)] : [];
-  const q = query(ref, ...filtros, where("cambioPendiente", "==", true));
-  return onSnapshot(q, (snap) => {
-    callback(
-      snap.docs.map((d) => ({
-        id: d.id,
-        elementoId: d.ref.parent.parent.id,
-        ...d.data(),
-      }))
-    );
-  }, vigilar(onError));
-}
-
-// Pedidos pendientes (sin importar el día): los que aún deben dinero y los
-// que todavía no se entregan. Son dos consultas (Firestore no mezcla
-// desigualdad y booleano en una sola) y se unen por elemento/pedido para no
-// repetir los que cumplen las dos condiciones.
-export function listenPedidosPendientes(callback, onError, unidad) {
-  const ref = collectionGroup(db, "pedidos");
-  const filtros = unidad ? [where("unidad", "==", unidad)] : [];
-  const deuda = new Map();
-  const entrega = new Map();
-  let listos = 0;
-  let cerrado = false;
-
-  const clave = (d) => `${d.ref.parent.parent.id}/${d.id}`;
-  const mapear = (d) => ({
-    id: d.id,
-    elementoId: d.ref.parent.parent.id,
-    ...d.data(),
-  });
-
-  function emitir() {
-    if (cerrado || listos < 2) return;
-    const vistos = new Map();
-    for (const par of [deuda, entrega]) {
-      for (const [k, v] of par) vistos.set(k, v);
-    }
-    callback([...vistos.values()]);
-  }
-
-  const cerrarDeuda = onSnapshot(
-    query(ref, ...filtros, where("saldoPendiente", ">", 0)),
-    (snap) => {
-      deuda.clear();
-      snap.docs.forEach((d) => deuda.set(clave(d), mapear(d)));
-      listos |= 1;
-      emitir();
-    },
-    vigilar(onError)
-  );
-  const cerrarEntrega = onSnapshot(
-    query(ref, ...filtros, where("entregado", "==", false)),
-    (snap) => {
-      entrega.clear();
-      snap.docs.forEach((d) => entrega.set(clave(d), mapear(d)));
-      listos |= 2;
-      emitir();
-    },
-    vigilar(onError)
-  );
-
-  return () => {
-    cerrado = true;
-    cerrarDeuda();
-    cerrarEntrega();
-  };
-}

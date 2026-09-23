@@ -1353,3 +1353,65 @@ th {
 .estado-respaldo {
   margin-bottom: 12px;
 }
+
+/* --- Relación de pagos: por elemento --- */
+.lista-relacion {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.relacion-elemento {
+  margin: 0;
+  gap: 6px;
+}
+
+/* Toda la cabecera es el botón que despliega los pedidos del elemento. */
+.relacion-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font-weight: 400;
+}
+
+.relacion-cabecera:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.relacion-nombre {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.relacion-resumen {
+  flex-basis: 100%;
+}
+
+.relacion-detalle {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.insignia-neutra {
+  background: var(--border);
+  color: var(--text-muted);
+}
+
+.lista-omitidos {
+  margin: 6px 0 0 18px;
+  font-size: 13px;
+}

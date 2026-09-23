@@ -93,21 +93,21 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "saldoPendiente",
+          "fieldPath": "actualizadoEn",
           "order": "ASCENDING"
         }
       ]
     },
     {
-      "collectionGroup": "pedidos",
-      "queryScope": "COLLECTION_GROUP",
+      "collectionGroup": "bajasPedidos",
+      "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "unidad",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "entregado",
+          "fieldPath": "en",
           "order": "ASCENDING"
         }
       ]
@@ -160,6 +160,28 @@
         },
         {
           "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "pedidos",
+      "fieldPath": "unidad",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
           "queryScope": "COLLECTION"
         },
         {

@@ -53,13 +53,21 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("../firebase", () => ({ db: {} }));
 
+// La sincronización por cambios se prueba en elementos.test.js; aquí solo
+// importa con qué configuración se pide.
+const escucharPorCambios = vi.fn(() => () => {});
+vi.mock("./sincronia", () => ({
+  escucharPorCambios: (...args) => escucharPorCambios(...args),
+}));
+
 const {
   crearPedido,
   marcarEntregado,
   marcarCambioPendiente,
   registrarAbono,
   eliminarPedido,
-  listenPedidosPendientes,
+  listenPedidosDeUnidad,
+  sinBorrados,
 } = await import("./pedidos");
 
 beforeEach(() => {
@@ -210,11 +218,12 @@ describe("registrarAbono", () => {
 });
 
 describe("eliminarPedido", () => {
-  it("borra el pedido y todos sus abonos en un solo batch", async () => {
+  it("borra el pedido y sus abonos y deja su baja, todo en un solo batch", async () => {
     batch.delete.mockClear();
+    batch.set.mockClear();
     batch.commit.mockClear();
     getDocs.mockResolvedValueOnce({ docs: [{ ref: "a1" }, { ref: "a2" }] });
-    await eliminarPedido("el1", "p1");
+    await eliminarPedido("el1", "p1", "2da Unidad");
     expect(batch.delete).toHaveBeenCalledWith("a1");
     expect(batch.delete).toHaveBeenCalledWith("a2");
     expect(batch.delete).toHaveBeenCalledWith({
@@ -222,63 +231,61 @@ describe("eliminarPedido", () => {
       path: ["elementos", "el1", "pedidos", "p1"],
     });
     expect(batch.delete).toHaveBeenCalledTimes(3);
+    expect(batch.set).toHaveBeenCalledWith(
+      { __type: "doc", path: ["bajasPedidos", "el1_p1"] },
+      { unidad: "2da Unidad", elementoId: "el1", pedidoId: "p1", en: "SERVER_TIMESTAMP" }
+    );
     expect(batch.commit).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("listenPedidosPendientes", () => {
-  function snap(docs) {
-    return {
-      docs: docs.map(({ id, elementoId, ...datos }) => ({
-        id,
-        ref: {
-          parent: { parent: { id: elementoId } },
-        },
-        data: () => datos,
-      })),
-    };
-  }
+describe("actualizadoEn (sincronización por cambios)", () => {
+  it("toda escritura en un pedido lleva la hora del servidor", async () => {
+    await crearPedido("el1", { articulo: "Gorra", precioTotal: 100, unidad: "U" });
+    expect(addDoc.mock.calls.at(-1)[1].actualizadoEn).toBe("SERVER_TIMESTAMP");
+    await marcarEntregado("el1", "p1", true, "Ana");
+    expect(updateDoc.mock.calls.at(-1)[1].actualizadoEn).toBe("SERVER_TIMESTAMP");
+    await marcarCambioPendiente("el1", "p1", true, "Talla");
+    expect(updateDoc.mock.calls.at(-1)[1].actualizadoEn).toBe("SERVER_TIMESTAMP");
+    batch.update.mockClear();
+    await registrarAbono("el1", "p1", { monto: 10, pedido: { saldoPendiente: 100 } });
+    expect(batch.update.mock.calls[0][1].actualizadoEn).toBe("SERVER_TIMESTAMP");
+  });
+});
 
-  it("une deuda y entrega por elemento/pedido sin duplicar", () => {
-    const recibidos = [];
-    listenPedidosPendientes((d) => recibidos.push(d), undefined, undefined);
-    expect(onSnapshot).toHaveBeenCalledTimes(2);
-    const handlers = onSnapshot.mock.calls.map(([, alSnap]) => alSnap);
+describe("listenPedidosDeUnidad", () => {
+  it("sincroniza por cambios los pedidos de esa Unidad y anota su elemento", () => {
+    escucharPorCambios.mockClear();
+    listenPedidosDeUnidad(() => {}, "2da Unidad");
+    const [config] = escucharPorCambios.mock.calls[0];
+    expect(config.clave).toBe("pedidos:2da Unidad");
+    expect(collectionGroup).toHaveBeenCalledWith({}, "pedidos");
+    expect(where).toHaveBeenCalledWith("unidad", "==", "2da Unidad");
+    const convertido = config.convertir({
+      id: "p1",
+      ref: { parent: { parent: { id: "el9" } } },
+      data: () => ({ articulo: "Gorra" }),
+    });
+    expect(convertido).toEqual({ id: "p1", elementoId: "el9", articulo: "Gorra" });
+  });
+});
 
-    handlers[0](
-      snap([
-        { id: "p1", elementoId: "e1", articulo: "Playera", saldoPendiente: 100, entregado: false },
-        { id: "p2", elementoId: "e2", articulo: "Gorra", saldoPendiente: 50, entregado: true },
-      ])
-    );
-    // Aún falta la segunda consulta: no se emite nada todavía.
-    expect(recibidos).toHaveLength(0);
+describe("sinBorrados", () => {
+  const ts = (ms) => ({ toMillis: () => ms });
+  const pedido = (id, actualizadoEn) => ({ id, elementoId: "e1", actualizadoEn });
 
-    handlers[1](
-      snap([
-        { id: "p1", elementoId: "e1", articulo: "Playera", saldoPendiente: 100, entregado: false },
-        { id: "p3", elementoId: "e2", articulo: "Pantalón", saldoPendiente: 0, entregado: false },
-      ])
-    );
-
-    const ultima = recibidos.at(-1);
-    expect(ultima).toHaveLength(3);
-    const claves = ultima.map((p) => `${p.elementoId}/${p.id}`).sort();
-    expect(claves).toEqual(["e1/p1", "e2/p2", "e2/p3"]);
+  it("quita los pedidos con baja", () => {
+    const pedidos = [pedido("p1", ts(100)), pedido("p2", ts(100))];
+    const bajas = [{ id: "e1_p1", en: ts(200) }];
+    expect(sinBorrados(pedidos, bajas).map((p) => p.id)).toEqual(["p2"]);
   });
 
-  it("al cerrar no emite más cambios de las consultas", () => {
-    const recibidos = [];
-    const cerrar = listenPedidosPendientes((d) => recibidos.push(d), undefined, undefined);
-    const handlers = onSnapshot.mock.calls.map(([, alSnap]) => alSnap);
-    onSnapshot.mockClear();
+  it("un pedido reescrito después de su baja (p. ej. restaurado) vuelve a contar", () => {
+    const bajas = [{ id: "e1_p1", en: ts(200) }];
+    expect(sinBorrados([pedido("p1", ts(300))], bajas)).toHaveLength(1);
+  });
 
-    handlers[0](snap([]));
-    handlers[1](snap([]));
-    expect(recibidos).toHaveLength(1);
-
-    cerrar();
-    handlers[0](snap([{ id: "p9", elementoId: "e9", saldoPendiente: 1, entregado: false }]));
-    expect(recibidos).toHaveLength(1);
+  it("un pedido antiguo sin actualizadoEn con baja también se quita", () => {
+    expect(sinBorrados([pedido("p1", undefined)], [{ id: "e1_p1", en: ts(1) }])).toEqual([]);
   });
 });
