@@ -13,6 +13,7 @@ import {
   mensajeCambioPendiente,
 } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
+import { esAdmin, esSoloLectura } from "../lib/roles";
 
 function avisar(elemento, mensaje) {
   const telefono = elemento.telefonos?.[0];
@@ -22,8 +23,10 @@ function avisar(elemento, mensaje) {
 
 export default function PedidoCard({ cliente: elemento, pedido }) {
   const { user, perfil } = useAuth();
-  // Un pedido con pagos solo lo borra un Admin; uno sin pagos, cualquiera.
-  const puedeEliminar = perfil?.rol === "admin" || pedido.saldoPendiente === pedido.precioTotal;
+  const soloLectura = esSoloLectura(perfil);
+  // Un pedido con pagos solo lo borra un Admin; uno sin pagos, cualquiera con
+  // acceso de escritura (Estado Mayor no borra nada).
+  const puedeEliminar = !soloLectura && (esAdmin(perfil) || pedido.saldoPendiente === pedido.precioTotal);
   const quien = user?.displayName || user?.email || "";
   const [abonos, setAbonos] = useState([]);
   const [verHistorial, setVerHistorial] = useState(false);
@@ -151,12 +154,13 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
           type="checkbox"
           checked={!!pedido.entregado}
           onChange={(e) => onEntregar(e.target.checked)}
+          disabled={soloLectura}
         />
         Entregado
         {pedido.entregado && pedido.quienEntrego ? ` (por ${pedido.quienEntrego})` : ""}
       </label>
 
-      {!liquidado && (
+      {!soloLectura && !liquidado && (
         <form onSubmit={onAbonar} className="inline-form">
           <input
             placeholder="Monto del abono"
@@ -170,7 +174,7 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
         </form>
       )}
 
-      {!pedido.cambioPendiente && !mostrarFormCambio && (
+      {!soloLectura && !pedido.cambioPendiente && !mostrarFormCambio && (
         <button
           type="button"
           className="btn-secondary btn-small"
@@ -200,7 +204,7 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
         </form>
       )}
 
-      {pedido.cambioPendiente && (
+      {!soloLectura && pedido.cambioPendiente && (
         <button
           type="button"
           className="btn-secondary btn-small"

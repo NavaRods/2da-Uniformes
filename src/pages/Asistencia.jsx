@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useElementos, useUnidades, useGrados } from "../lib/fuentes";
 import { buscar } from "../lib/busqueda";
 import { useAuth } from "../auth/AuthContext";
+import { veTodasLasUnidades, esSoloLectura } from "../lib/roles";
 import FormElemento from "../components/FormElemento";
 import ListaBajas from "../components/ListaBajas";
 import EstadoFuerza from "../components/EstadoFuerza";
@@ -17,8 +18,10 @@ import {
 
 export default function Asistencia() {
   const { perfil } = useAuth();
-  const esAdmin = perfil?.rol === "admin";
-  const [unidad, setUnidad] = useState(esAdmin ? "" : perfil?.unidad || "");
+  const puedeElegirUnidad = veTodasLasUnidades(perfil);
+  const soloLectura = esSoloLectura(perfil);
+  // Responsable/Instructor traen su Unidad precargada y fija; el resto elige.
+  const [unidad, setUnidad] = useState(puedeElegirUnidad ? "" : perfil?.unidad || "");
   const [fecha, setFecha] = useState(fechaLocal());
   const [asistencia, setAsistencia] = useState({});
   const [busqueda, setBusqueda] = useState("");
@@ -27,8 +30,9 @@ export default function Asistencia() {
   const [vista, setVista] = useState("lista"); // lista | fuerza | bajas
   const grados = useGrados();
 
-  const unidades = useUnidades(esAdmin);
-  // Sin Unidad elegida (Admin) no se carga nada: antes leía todos los elementos.
+  const unidades = useUnidades(puedeElegirUnidad);
+  // Sin Unidad elegida (roles que ven todas) no se carga nada: antes leía
+  // todos los elementos.
   const elementos = useElementos(unidad);
   useEffect(() => listenAsistenciaDia(fecha, unidad, setAsistencia), [fecha, unidad]);
 
@@ -41,7 +45,9 @@ export default function Asistencia() {
     }
   }
 
-  const elementosDeUnidad = esAdmin ? elementos.filter((e) => !unidad || e.unidad === unidad) : elementos;
+  const elementosDeUnidad = puedeElegirUnidad
+    ? elementos.filter((e) => !unidad || e.unidad === unidad)
+    : elementos;
   // Los elementos de baja no aparecen en la Lista (ni al buscar): para eso
   // está la pestaña de Bajas, donde se pueden reactivar.
   const activos = elementosDeUnidad.filter((el) => estaActivo(el));
@@ -54,12 +60,14 @@ export default function Asistencia() {
     <div className="page">
       <div className="page-header">
         <h1>Asistencia</h1>
-        <button
-          className="btn-primary"
-          onClick={() => setMostrarForm((v) => !v)}
-        >
-          {mostrarForm ? "Cancelar" : "+ Nuevo elemento"}
-        </button>
+        {!soloLectura && (
+          <button
+            className="btn-primary"
+            onClick={() => setMostrarForm((v) => !v)}
+          >
+            {mostrarForm ? "Cancelar" : "+ Nuevo elemento"}
+          </button>
+        )}
       </div>
 
       {mostrarForm && (
@@ -69,7 +77,7 @@ export default function Asistencia() {
         />
       )}
 
-      {esAdmin && (
+      {puedeElegirUnidad && (
         <div className="campo">
           <label>Unidad</label>
           <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
@@ -83,7 +91,7 @@ export default function Asistencia() {
         </div>
       )}
 
-      {(!esAdmin || unidad) && (
+      {(!puedeElegirUnidad || unidad) && (
         <>
           <div className="asistencia-controles">
             <input
@@ -130,7 +138,7 @@ export default function Asistencia() {
             />
           )}
 
-          {vista === "bajas" && <ListaBajas bajas={bajas} />}
+          {vista === "bajas" && <ListaBajas bajas={bajas} soloLectura={soloLectura} />}
 
           {vista === "lista" && (
           <>
@@ -148,6 +156,7 @@ export default function Asistencia() {
                     onChange={(e) => cambiar(el, e.target.value)}
                     className={`estado estado-${estado || "sin"}`}
                     aria-label={`Estado de ${el.nombre}`}
+                    disabled={soloLectura}
                   >
                     <option value="" disabled>
                       Sin marcar

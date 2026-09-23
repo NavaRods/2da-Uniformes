@@ -3,20 +3,23 @@ import { Link } from "react-router-dom";
 import { useElementos, useUnidades } from "../lib/fuentes";
 import { estaActivo } from "../lib/elementos";
 import { useAuth } from "../auth/AuthContext";
+import { veTodasLasUnidades, esSoloLectura } from "../lib/roles";
 import FormElemento from "../components/FormElemento";
 import ListaBajas from "../components/ListaBajas";
 
 export default function Elementos() {
   const { perfil } = useAuth();
-  const esAdmin = perfil?.rol === "admin";
-  const [unidad, setUnidad] = useState(esAdmin ? "" : perfil?.unidad || "");
+  const puedeElegirUnidad = veTodasLasUnidades(perfil);
+  const soloLectura = esSoloLectura(perfil);
+  // Responsable/Instructor traen su Unidad precargada y fija; el resto elige.
+  const [unidad, setUnidad] = useState(puedeElegirUnidad ? "" : perfil?.unidad || "");
   const [busqueda, setBusqueda] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
   const [vista, setVista] = useState("activos"); // activos | bajas
 
-  const unidades = useUnidades(esAdmin);
-  // El Admin elige una Unidad antes de cargar su lista: así no se leen todos
-  // los elementos de todas las Unidades cada vez que se abre la pantalla.
+  const unidades = useUnidades(puedeElegirUnidad);
+  // Sin Unidad elegida (roles que ven todas) no se carga nada: así no se leen
+  // todos los elementos de todas las Unidades cada vez que se abre la pantalla.
   const elementos = useElementos(unidad);
 
   const coincide = (el) => el.nombre.toLowerCase().includes(busqueda.toLowerCase());
@@ -28,9 +31,11 @@ export default function Elementos() {
     <div className="page">
       <div className="page-header">
         <h1>Elementos</h1>
-        <button className="btn-primary" onClick={() => setMostrarForm((v) => !v)}>
-          {mostrarForm ? "Cancelar" : "+ Nuevo elemento"}
-        </button>
+        {!soloLectura && (
+          <button className="btn-primary" onClick={() => setMostrarForm((v) => !v)}>
+            {mostrarForm ? "Cancelar" : "+ Nuevo elemento"}
+          </button>
+        )}
       </div>
 
       {mostrarForm && (
@@ -40,7 +45,7 @@ export default function Elementos() {
         />
       )}
 
-      {esAdmin && (
+      {puedeElegirUnidad && (
         <div className="campo">
           <label>Unidad</label>
           <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
@@ -96,7 +101,7 @@ export default function Elementos() {
           ))}
           {activos.length === 0 && (
             <p>
-              {esAdmin && !unidad
+              {puedeElegirUnidad && !unidad
                 ? "Selecciona una Unidad para ver sus elementos."
                 : "Sin elementos todavía."}
             </p>
@@ -104,7 +109,7 @@ export default function Elementos() {
         </ul>
       )}
 
-      {vista === "bajas" && <ListaBajas bajas={bajas} />}
+      {vista === "bajas" && <ListaBajas bajas={bajas} soloLectura={soloLectura} />}
     </div>
   );
 }

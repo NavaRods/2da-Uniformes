@@ -13,6 +13,7 @@ import Uniformidad from "./pages/Uniformidad";
 import Usuarios from "./pages/Usuarios";
 import Configuracion from "./pages/Configuracion";
 import EstadoConexion from "./components/EstadoConexion";
+import { esAdmin, requiereUnidad } from "./lib/roles";
 import "./App.css";
 
 function Privado({ children, soloAdmin = false }) {
@@ -30,7 +31,7 @@ function Privado({ children, soloAdmin = false }) {
       </div>
     );
   }
-  if (perfil.rol !== "admin" && !perfil.unidad) {
+  if (requiereUnidad(perfil.rol) && !perfil.unidad) {
     return (
       <div className="page">
         <h1>Sin Unidad asignada</h1>
@@ -41,7 +42,7 @@ function Privado({ children, soloAdmin = false }) {
       </div>
     );
   }
-  if (soloAdmin && perfil.rol !== "admin") return <Navigate to="/" replace />;
+  if (soloAdmin && !esAdmin(perfil)) return <Navigate to="/" replace />;
   return children;
 }
 

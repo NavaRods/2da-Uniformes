@@ -12,10 +12,12 @@ import { actualizarElemento } from "../lib/elementos";
 import { fechaLocal } from "../lib/asistencia";
 import { formatoMoneda } from "../lib/format";
 import { useAuth } from "../auth/AuthContext";
+import { esAdmin, esSoloLectura } from "../lib/roles";
 
 export default function CuotaMensualidad({ elemento, cuotas }) {
   const { user, perfil } = useAuth();
-  const esAdmin = perfil?.rol === "admin";
+  const puedeEliminarPagos = esAdmin(perfil);
+  const soloLectura = esSoloLectura(perfil);
   const [anio, setAnio] = useState(new Date().getFullYear());
   const [seleccion, setSeleccion] = useState([]);
   const [precio, setPrecio] = useState(String(MENSUALIDAD_DEFAULT));
@@ -74,6 +76,7 @@ export default function CuotaMensualidad({ elemento, cuotas }) {
 
   return (
     <>
+      {!soloLectura && (
       <div className="card">
         <h2>Cobrar mensualidad</h2>
 
@@ -153,6 +156,7 @@ export default function CuotaMensualidad({ elemento, cuotas }) {
               : `Registrar ${seleccion.length} ${seleccion.length === 1 ? "mes" : "meses"} — ${formatoMoneda(total)}`}
         </button>
       </div>
+      )}
 
       <div className="card">
         <h2>Pagos de mensualidad</h2>
@@ -167,7 +171,7 @@ export default function CuotaMensualidad({ elemento, cuotas }) {
                   {c.horaLocal || ""} · {c.quienRecibio}
                 </span>
               </div>
-              {esAdmin && (
+              {puedeEliminarPagos && (
                 <button type="button" className="btn-secondary btn-small" onClick={() => onEliminar(c)}>
                   Eliminar
                 </button>

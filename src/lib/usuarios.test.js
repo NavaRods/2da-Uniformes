@@ -50,7 +50,7 @@ describe("normalizarCorreo", () => {
 
 describe("crearUsuario", () => {
   it("usa el correo normalizado como ID del documento", async () => {
-    await crearUsuario({ correo: " Ana@Club.com ", nombre: "Ana", rol: "operador", unidad: "2da Unidad" });
+    await crearUsuario({ correo: " Ana@Club.com ", nombre: "Ana", rol: "responsable", unidad: "2da Unidad" });
     const [, , correoUsado] = doc.mock.calls[0];
     expect(correoUsado).toBe("ana@club.com");
   });
@@ -61,14 +61,14 @@ describe("crearUsuario", () => {
     expect(datos.unidad).toBeNull();
   });
 
-  it("conserva la unidad cuando el rol es operador", async () => {
-    await crearUsuario({ correo: "op@club.com", nombre: "Op", rol: "operador", unidad: "3ra Unidad" });
+  it("conserva la unidad cuando el rol es responsable", async () => {
+    await crearUsuario({ correo: "op@club.com", nombre: "Op", rol: "responsable", unidad: "3ra Unidad" });
     const [, datos] = lote.set.mock.calls[0];
     expect(datos.unidad).toBe("3ra Unidad");
   });
 
   it("arranca activo y con el grado recibido", async () => {
-    await crearUsuario({ correo: "op@club.com", nombre: "Op", rol: "operador", unidad: "3ra Unidad", grado: "Capitán" });
+    await crearUsuario({ correo: "op@club.com", nombre: "Op", rol: "responsable", unidad: "3ra Unidad", grado: "Capitán" });
     const [, datos] = lote.set.mock.calls[0];
     expect(datos.activo).toBe(true);
     expect(datos.grado).toBe("Capitán");
@@ -95,7 +95,7 @@ describe("crearUsuario con un correo que ya existe", () => {
   it("no pisa al usuario existente y avisa con un código propio", async () => {
     getDoc.mockResolvedValueOnce({ exists: () => true });
     await expect(
-      crearUsuario({ correo: "Ana@x.com", nombre: "Ana", rol: "operador", unidad: "U1" })
+      crearUsuario({ correo: "Ana@x.com", nombre: "Ana", rol: "responsable", unidad: "U1" })
     ).rejects.toMatchObject({ code: "ya-existe" });
     expect(lote.set).not.toHaveBeenCalled();
   });
@@ -103,8 +103,8 @@ describe("crearUsuario con un correo que ya existe", () => {
 
 describe("versión de usuarios", () => {
   it("cada escritura actualiza la versión de la colección usuarios", async () => {
-    await crearUsuario({ correo: "op@club.com", nombre: "Op", rol: "operador", unidad: "U1" });
-    await editarUsuario("op@club.com", { nombre: "Op", rol: "operador", unidad: "U1" });
+    await crearUsuario({ correo: "op@club.com", nombre: "Op", rol: "responsable", unidad: "U1" });
+    await editarUsuario("op@club.com", { nombre: "Op", rol: "responsable", unidad: "U1" });
     await cambiarActivo("op@club.com", false);
     expect(escribirConVersion.mock.calls.map(([coleccion]) => coleccion)).toEqual([
       "usuarios",

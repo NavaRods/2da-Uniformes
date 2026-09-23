@@ -5,12 +5,21 @@ service cloud.firestore {
 
     // --- Autorización ---
     // Único punto de verdad de quién puede entrar: un doc en `usuarios` con
-    // ID = correo (en minúsculas). Ya no es una lista fija en este archivo;
-    // se administra desde la pantalla de Usuarios dentro de la app.
-    // IMPORTANTE (bootstrap): el primer usuario Admin no se puede crear desde
-    // la app (necesita ya ser Admin para eso). Se crea a mano una sola vez
-    // desde la consola de Firebase: colección "usuarios", doc con ID = tu
-    // correo en minúsculas, campos { rol: "admin", unidad: null, nombre: "..." }.
+    // ID = correo (en minúsculas). Se administra desde la pantalla de
+    // Usuarios dentro de la app, excepto el rol "superadmin" (ver abajo).
+    //
+    // Roles: "superadmin" (todo el poder, incluida la gestión de Admins),
+    // "admin" (Configuración y Usuarios, todas las Unidades), "estado_mayor"
+    // (consulta todas las Unidades, no escribe en ninguna), "responsable" e
+    // "instructor" (una sola Unidad fija, control total sobre ella).
+    //
+    // IMPORTANTE (bootstrap): "superadmin" nunca se crea ni edita desde la
+    // app (ni un Admin puede tocarlo): se da de alta a mano, una sola vez,
+    // desde la consola de Firebase → Firestore → colección "usuarios" →
+    // documento con ID = tu correo en minúsculas, campos
+    // { rol: "superadmin", unidad: null, nombre: "..." }. De ahí en
+    // adelante, ese Super Admin (o un Admin que dé de alta) crea a los demás
+    // desde la app.
     function usuarioActual() {
       return get(/databases/$(database)/documents/usuarios/$(request.auth.token.email.lower()));
     }
@@ -23,15 +32,42 @@ service cloud.firestore {
         usuarioActual().data.get("activo", true) == true;
     }
 
+    function miRol() {
+      return usuarioActual().data.rol;
+    }
+
+    // Admin y Super Admin: mismo nivel para administrar la app (Usuarios,
+    // Configuración, todas las Unidades con permiso de escritura). Se
+    // diferencian en que a un Super Admin nadie lo edita desde la app (ver
+    // match /usuarios/{email}).
     function esAdmin() {
-      return esUsuarioAutorizado() && usuarioActual().data.rol == "admin";
+      return esUsuarioAutorizado() && miRol() in ["admin", "superadmin"];
+    }
+
+    function esEstadoMayor() {
+      return esUsuarioAutorizado() && miRol() == "estado_mayor";
+    }
+
+    // Ve todas las Unidades sin tener una fija: Admin/Super Admin para
+    // administrar, Estado Mayor para consultar (de solo lectura).
+    function veTodasLasUnidades() {
+      return esAdmin() || esEstadoMayor();
     }
 
     function miUnidad() {
       return usuarioActual().data.unidad;
     }
 
-    function enMiUnidad(unidad) {
+    // Puede LEER esa Unidad: Admin/Super Admin/Estado Mayor en cualquiera,
+    // Responsable/Instructor solo la suya.
+    function puedeVerUnidad(unidad) {
+      return veTodasLasUnidades() || (esUsuarioAutorizado() && unidad == miUnidad());
+    }
+
+    // Puede ESCRIBIR en esa Unidad: Admin/Super Admin en cualquiera,
+    // Responsable/Instructor solo la suya. Estado Mayor en ninguna (es de
+    // solo lectura, aunque vea todas).
+    function puedeEscribirUnidad(unidad) {
       return esAdmin() || (esUsuarioAutorizado() && unidad == miUnidad());
     }
 
@@ -68,10 +104,12 @@ service cloud.firestore {
     // --- Usuarios (cuentas con acceso) ---
     // "grado" es solo una etiqueta libre (no afecta permisos). "activo"
     // permite suspender el acceso de alguien sin borrar su cuenta.
+    // "superadmin" no está entre los roles válidos aquí a propósito: no se
+    // puede crear ni editar un usuario con ese rol desde la app.
     function usuarioValido(datos) {
       return datos.keys().hasOnly(["nombre", "rol", "unidad", "grado", "activo", "creadoEn"]) &&
-        datos.rol in ["admin", "operador"] &&
-        (datos.rol == "admin" || (datos.unidad is string && datos.unidad.size() > 0)) &&
+        datos.rol in ["admin", "estado_mayor", "responsable", "instructor"] &&
+        (datos.rol in ["admin", "estado_mayor"] || (datos.unidad is string && datos.unidad.size() > 0)) &&
         (!("nombre" in datos) || datos.nombre is string) &&
         (!("grado" in datos) || datos.grado is string) &&
         (!("activo" in datos) || datos.activo is bool);
@@ -80,14 +118,17 @@ service cloud.firestore {
     match /usuarios/{email} {
       allow read: if esAdmin() || (request.auth != null && request.auth.token.email.lower() == email);
       allow create: if esAdmin() && usuarioValido(request.resource.data) && versionActualizada("usuarios");
-      // Un Admin no puede quitarse a sí mismo el acceso ni el rol (ni
-      // borrarse): así la app nunca se queda sin Admin. Otro Admin sí puede.
+      // Un Admin no puede quitarse a sí mismo el acceso ni el rol (así la
+      // app nunca se queda sin Admin), y nadie —ni otro Admin— puede tocar
+      // la cuenta de un Super Admin desde la app.
       allow update: if esAdmin() && usuarioValido(request.resource.data) &&
         versionActualizada("usuarios") &&
+        resource.data.rol != "superadmin" &&
         (request.auth.token.email.lower() != email ||
           (request.resource.data.rol == "admin" &&
            request.resource.data.get("activo", true) == true));
       allow delete: if esAdmin() && request.auth.token.email.lower() != email &&
+        resource.data.rol != "superadmin" &&
         versionActualizada("usuarios");
     }
 
@@ -156,10 +197,10 @@ service cloud.firestore {
     }
 
     match /elementos/{elementoId} {
-      allow read: if enMiUnidad(resource.data.unidad);
-      allow create: if elementoValido(request.resource.data) && enMiUnidad(request.resource.data.unidad);
+      allow read: if puedeVerUnidad(resource.data.unidad);
+      allow create: if elementoValido(request.resource.data) && puedeEscribirUnidad(request.resource.data.unidad);
       allow update: if elementoValido(request.resource.data) &&
-        enMiUnidad(resource.data.unidad) && enMiUnidad(request.resource.data.unidad);
+        puedeEscribirUnidad(resource.data.unidad) && puedeEscribirUnidad(request.resource.data.unidad);
       // Las bajas normales se marcan con fechaBaja; borrar un elemento (y con
       // eso su historial) es cosa de un Admin.
       allow delete: if esAdmin();
@@ -222,9 +263,9 @@ service cloud.firestore {
       }
 
       match /cuotas/{cuotaId} {
-        allow read: if enMiUnidad(unidadDelElemento(elementoId));
+        allow read: if puedeVerUnidad(unidadDelElemento(elementoId));
         allow create: if cuotaValida(request.resource.data, unidadDelElemento(elementoId)) &&
-          enMiUnidad(unidadDelElemento(elementoId));
+          puedeEscribirUnidad(unidadDelElemento(elementoId));
         // Un pago mal registrado no se edita. Solo un Admin puede borrarlo
         // (rastro de auditoría) y luego se vuelve a capturar. Única excepción
         // de edición: un Admin puede agregar el campo "unidad" a cuotas
@@ -236,18 +277,18 @@ service cloud.firestore {
       }
 
       match /pedidos/{pedidoId} {
-        allow read: if enMiUnidad(unidadDelElemento(elementoId));
+        allow read: if puedeVerUnidad(unidadDelElemento(elementoId));
 
         // Un pedido nace sin pagos: el saldo es el precio completo.
         allow create: if pedidoValido(request.resource.data, unidadDelElemento(elementoId)) &&
           "unidad" in request.resource.data &&
-          enMiUnidad(unidadDelElemento(elementoId)) &&
+          puedeEscribirUnidad(unidadDelElemento(elementoId)) &&
           request.resource.data.precioTotal >= 0 &&
           request.resource.data.saldoPendiente == request.resource.data.precioTotal &&
           !("ultimoAbonoId" in request.resource.data);
 
         allow update: if pedidoValido(request.resource.data, unidadDelElemento(elementoId)) &&
-          enMiUnidad(unidadDelElemento(elementoId)) &&
+          puedeEscribirUnidad(unidadDelElemento(elementoId)) &&
           pedidoSoloCambiaPermitido(resource.data, request.resource.data) &&
           (request.resource.data.saldoPendiente == resource.data.saldoPendiente ||
             saldoBajaPorAbono(elementoId, pedidoId, resource.data, request.resource.data));
@@ -255,7 +296,7 @@ service cloud.firestore {
         // Un pedido sin pagos (saldo = precio) lo puede borrar cualquiera de
         // la Unidad, p. ej. uno capturado por error. Si ya tiene pagos, solo
         // un Admin.
-        allow delete: if enMiUnidad(unidadDelElemento(elementoId)) &&
+        allow delete: if puedeEscribirUnidad(unidadDelElemento(elementoId)) &&
           (esAdmin() || resource.data.saldoPendiente == resource.data.precioTotal);
 
         // --- Abonos de un pedido ---
@@ -271,12 +312,12 @@ service cloud.firestore {
         }
 
         match /abonos/{abonoId} {
-          allow read: if enMiUnidad(unidadDelElemento(elementoId));
+          allow read: if puedeVerUnidad(unidadDelElemento(elementoId));
 
           // Un abono solo se crea junto con el descuento exacto en el saldo
           // del pedido (ver saldoBajaPorAbono).
           allow create: if abonoValido(request.resource.data, unidadDelElemento(elementoId)) &&
-            enMiUnidad(unidadDelElemento(elementoId)) &&
+            puedeEscribirUnidad(unidadDelElemento(elementoId)) &&
             getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.get("ultimoAbonoId", "") == abonoId &&
             getAfter(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente ==
               get(/databases/$(database)/documents/elementos/$(elementoId)/pedidos/$(pedidoId)).data.saldoPendiente - request.resource.data.monto;
@@ -326,8 +367,8 @@ service cloud.firestore {
     }
 
     match /asistencias/{fecha}/porUnidad/{unidad} {
-      allow read: if enMiUnidad(unidad);
-      allow write: if enMiUnidad(unidad) && asistenciaValida(request.resource.data, unidad);
+      allow read: if puedeVerUnidad(unidad);
+      allow write: if puedeEscribirUnidad(unidad) && asistenciaValida(request.resource.data, unidad);
     }
 
     // Formato anterior (un doc plano por día con todos los elementos). Ya no
@@ -338,8 +379,8 @@ service cloud.firestore {
 
     // --- Configuración de la app ---
     // Ajustes compartidos (hoy, solo el número de WhatsApp que recibe la
-    // Relación de pagos). Un número con código de país: 11 a 15 dígitos.
-    // Lo puede cambiar cualquier usuario con acceso (Admin u Operador).
+    // Relación de pagos y el Estado de Fuerza). Un número con código de
+    // país: 11 a 15 dígitos. Lo puede cambiar cualquier usuario con acceso.
     match /configuracion/{ajusteId} {
       allow read: if esUsuarioAutorizado();
       allow create, update: if esUsuarioAutorizado() &&
@@ -354,21 +395,22 @@ service cloud.firestore {
     // recursivo para esas consultas, y la regla solo puede apoyarse en campos
     // del propio documento (no en otro documento ni en la ruta, que la
     // consulta no fija). Por eso pedidos, abonos y cuotas guardan "unidad", y
-    // el Operador siempre consulta con `where("unidad", "==", su unidad)`.
+    // quien no ve todas las Unidades siempre consulta con
+    // `where("unidad", "==", su unidad)`.
     match /{path=**}/abonos/{abonoId} {
-      allow read: if enMiUnidad(resource.data.unidad);
+      allow read: if puedeVerUnidad(resource.data.unidad);
     }
 
     match /{path=**}/cuotas/{cuotaId} {
-      allow read: if enMiUnidad(resource.data.unidad);
+      allow read: if puedeVerUnidad(resource.data.unidad);
     }
 
     match /{path=**}/pedidos/{pedidoId} {
-      allow read: if enMiUnidad(resource.data.unidad);
+      allow read: if puedeVerUnidad(resource.data.unidad);
     }
 
     match /{path=**}/porUnidad/{unidadId} {
-      allow read: if enMiUnidad(resource.data.unidad);
+      allow read: if puedeVerUnidad(resource.data.unidad);
     }
 
     // Cualquier otra ruta no contemplada arriba queda bloqueada por

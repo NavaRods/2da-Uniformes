@@ -10,8 +10,9 @@ import {
 import { db } from "../firebase";
 import { vigilar } from "./estadoFirestore";
 import { escribirConVersion } from "./versiones";
+import { ROLES, requiereUnidad } from "./roles";
 
-export const ROLES = ["admin", "operador"];
+export { ROLES };
 
 // El correo es el ID del documento: así se puede dar de alta a alguien antes
 // de su primer inicio de sesión (igual que la lista de correos de antes).
@@ -46,7 +47,7 @@ export async function crearUsuario({ correo, nombre, rol, unidad, grado }) {
     lote.set(ref, {
       nombre: nombre || "",
       rol,
-      unidad: rol === "admin" ? null : unidad,
+      unidad: requiereUnidad(rol) ? unidad : null,
       grado: grado || "",
       activo: true,
       creadoEn: serverTimestamp(),
@@ -59,7 +60,7 @@ export async function editarUsuario(correo, { nombre, rol, unidad, grado }) {
     lote.update(doc(db, "usuarios", normalizarCorreo(correo)), {
       nombre: nombre || "",
       rol,
-      unidad: rol === "admin" ? null : unidad,
+      unidad: requiereUnidad(rol) ? unidad : null,
       grado: grado || "",
     });
   });

@@ -16,13 +16,26 @@ guardan localmente y se sincronizan solos cuando vuelve la conexión
 1. Copia `.env.example` a `.env.local`.
 2. Llena las variables `VITE_FIREBASE_*` con los datos de tu app web de
    Firebase (Configuración del proyecto → tus apps → Config).
-3. El acceso se administra con roles (Admin / Operador) y Unidades desde la
-   pantalla "Usuarios" dentro de la app — ver `firestore.rules`. El primer
-   Admin no se puede crear desde la app (necesita ya ser Admin para eso): se
-   da de alta una sola vez a mano desde la consola de Firebase → Firestore →
-   colección `usuarios` → documento con ID = tu correo en minúsculas, campos
-   `{ rol: "admin", unidad: null, nombre: "..." }`. De ahí en adelante, ese
-   Admin da de alta a los demás desde la app.
+3. El acceso se administra con roles y Unidades desde la pantalla "Usuarios"
+   dentro de la app — ver `firestore.rules` (`src/lib/roles.js` documenta qué
+   puede hacer cada uno):
+   - **Super Admin**: todo el poder, incluida la gestión de Admins. Nunca se
+     crea ni edita desde la app.
+   - **Admin**: Configuración (Unidades, grados, catálogo) y Usuarios; ve y
+     opera en todas las Unidades.
+   - **Estado Mayor**: consulta todas las Unidades, de solo lectura (no da de
+     alta ni edita nada).
+   - **Responsable**: a cargo de una sola Unidad (la suya), con control total
+     sobre ella.
+   - **Instructor**: ayudante de un Responsable, con una sola Unidad asignada
+     y el mismo alcance operativo dentro de ella.
+
+   El primer usuario, con rol Super Admin, no se puede crear desde la app
+   (necesita ya tener acceso para eso): se da de alta una sola vez a mano
+   desde la consola de Firebase → Firestore → colección `usuarios` →
+   documento con ID = tu correo en minúsculas, campos
+   `{ rol: "superadmin", unidad: null, nombre: "..." }`. De ahí en adelante,
+   ese Super Admin (o un Admin que dé de alta) crea a los demás desde la app.
 
 ## Desarrollo
 
@@ -35,7 +48,7 @@ reales mientras se prueba en el navegador. Se necesitan dos terminales:
 npm run emulators
 
 # Terminal 2 (la primera vez, o cuando el emulador arranque vacío):
-# crea un usuario Admin de prueba y una Unidad
+# crea un usuario Super Admin de prueba y una Unidad
 npm run seed:emulator tu-correo@ejemplo.com "2da Unidad"
 
 # Terminal 2: la app

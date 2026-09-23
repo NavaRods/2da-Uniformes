@@ -14,6 +14,7 @@ import {
 } from "../lib/whatsapp";
 import { fechaLocalISO, formatoMoneda } from "../lib/format";
 import { useAuth } from "../auth/AuthContext";
+import { esAdmin, veTodasLasUnidades } from "../lib/roles";
 import {
   etiquetaDia,
   filaDeAbono,
@@ -32,9 +33,10 @@ const FILTROS = [
 
 export default function RelacionPagos() {
   const { perfil } = useAuth();
-  const esAdmin = perfil?.rol === "admin";
-  // El Admin ve todas las Unidades; el Operador, solo la suya.
-  const unidadFiltro = esAdmin ? undefined : perfil?.unidad;
+  // Admin/Super Admin/Estado Mayor ven todas las Unidades; Responsable e
+  // Instructor, solo la suya.
+  const unidadFiltro = veTodasLasUnidades(perfil) ? undefined : perfil?.unidad;
+  const puedeConfigurarWhatsapp = esAdmin(perfil);
   const [fecha, setFecha] = useState(fechaLocalISO());
   const [abonos, setAbonos] = useState([]);
   const [cuotas, setCuotas] = useState([]);
@@ -248,7 +250,7 @@ export default function RelacionPagos() {
         >
           📲 Enviar relación del día por WhatsApp
         </button>
-        {esAdmin && (
+        {puedeConfigurarWhatsapp && (
           <button
             type="button"
             className="btn-secondary"
@@ -264,13 +266,13 @@ export default function RelacionPagos() {
 
       {!hayNumero && config && !mostrarConfig && (
         <p className="nota">
-          {esAdmin
+          {puedeConfigurarWhatsapp
             ? "Aún no hay un número configurado: pulsa ⚙️ para elegir a quién se envía."
             : "Aún no hay un número configurado. Pide a un Admin que lo configure."}
         </p>
       )}
 
-      {esAdmin && mostrarConfig && (
+      {puedeConfigurarWhatsapp && mostrarConfig && (
         <form onSubmit={guardarConfig} className="card">
           <h2>Número de WhatsApp</h2>
           <p className="nota">Recibirá la relación de pagos del día. Se guarda para todos los usuarios.</p>

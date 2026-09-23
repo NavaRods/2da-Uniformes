@@ -1,7 +1,9 @@
-// Da de alta un usuario Admin y una Unidad en el emulador de Firestore, para
-// no tener que crearlos a mano cada vez que se reinicia sin datos guardados.
-// Usa el Admin SDK (se salta las reglas), apuntado al emulador local — nunca
-// toca producción.
+// Da de alta un usuario Super Admin y una Unidad en el emulador de Firestore,
+// para no tener que crearlos a mano cada vez que se reinicia sin datos
+// guardados. Usa el Admin SDK (se salta las reglas), apuntado al emulador
+// local — nunca toca producción. Súper Admin porque ese rol nunca se puede
+// crear desde la app (ver firestore.rules): así se prueba la app en local
+// exactamente igual que en producción, donde tu cuenta también es Super Admin.
 //
 // Uso: node scripts/seed-emulator.mjs [correo] [unidad]
 // (con el emulador ya corriendo: npm run emulators, en otra terminal)
@@ -20,8 +22,8 @@ const db = getFirestore();
 
 async function main() {
   await db.collection("usuarios").doc(correo).set({
-    nombre: "Admin local",
-    rol: "admin",
+    nombre: "Super Admin local",
+    rol: "superadmin",
     unidad: null,
     grado: "",
     activo: true,
@@ -34,7 +36,7 @@ async function main() {
   });
 
   console.log(`Listo:`);
-  console.log(`  Admin:  ${correo}`);
+  console.log(`  Super Admin: ${correo}`);
   console.log(`  Unidad: ${unidad}`);
   console.log("");
   console.log(

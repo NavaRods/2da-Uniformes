@@ -13,6 +13,7 @@ import { requiereTalla, TALLA_TIPO } from "../lib/catalogo";
 import { useElementos, useCatalogo } from "../lib/fuentes";
 import { vigilar } from "../lib/estadoFirestore";
 import { useAuth } from "../auth/AuthContext";
+import { veTodasLasUnidades, esSoloLectura } from "../lib/roles";
 import CuotaMensualidad from "../components/CuotaMensualidad";
 import { listenCuotas, resumenCuotas, etiquetaMes } from "../lib/cuotas";
 import PedidoCard from "../components/PedidoCard";
@@ -41,7 +42,8 @@ export default function ElementoPerfil() {
 
   // El elemento sale de la lista ya cargada de su Unidad (0 lecturas). Solo si
   // no está ahí (enlace directo, o Admin sin saber la Unidad) se lee su documento.
-  const unidadDeLista = state?.unidad || (perfil?.rol === "admin" ? "" : perfil?.unidad || "");
+  const soloLectura = esSoloLectura(perfil);
+  const unidadDeLista = state?.unidad || (veTodasLasUnidades(perfil) ? "" : perfil?.unidad || "");
   const enLista = useElementos(unidadDeLista).find((e) => e.id === elementoId) || null;
   const buscarDirecto = !enLista;
   useEffect(() => {
@@ -285,20 +287,22 @@ export default function ElementoPerfil() {
                 </div>
               ))}
             </div>
-            <div className="inline-form">
-              <button className="btn-secondary btn-small" onClick={() => setEditando(true)}>
-                ✏️ Editar
-              </button>
-              {elemento.fechaBaja ? (
-                <button className="btn-secondary btn-small" onClick={onReactivar}>
-                  ↩️ Reactivar
+            {!soloLectura && (
+              <div className="inline-form">
+                <button className="btn-secondary btn-small" onClick={() => setEditando(true)}>
+                  ✏️ Editar
                 </button>
-              ) : (
-                <button className="btn-secondary btn-small" onClick={onDarDeBaja}>
-                  ⬇️ Dar de baja
-                </button>
-              )}
-            </div>
+                {elemento.fechaBaja ? (
+                  <button className="btn-secondary btn-small" onClick={onReactivar}>
+                    ↩️ Reactivar
+                  </button>
+                ) : (
+                  <button className="btn-secondary btn-small" onClick={onDarDeBaja}>
+                    ⬇️ Dar de baja
+                  </button>
+                )}
+              </div>
+            )}
             {errorBaja && <p className="error">{errorBaja}</p>}
           </>
         )}
@@ -321,6 +325,7 @@ export default function ElementoPerfil() {
               type="button"
               className={`btn-toggle ${elemento.pagaInscripcion ? "activo" : ""}`}
               aria-pressed={!!elemento.pagaInscripcion}
+              disabled={soloLectura}
               onClick={() =>
                 actualizarElemento(elementoId, { pagaInscripcion: !elemento.pagaInscripcion })
               }
@@ -335,6 +340,7 @@ export default function ElementoPerfil() {
 
       {tab === "uniformes" && (
         <>
+      {!soloLectura && (
       <form onSubmit={onNuevoPedido} className="card">
         <h2>Nuevo pedido</h2>
         <select value={productoId} onChange={(e) => onSeleccionarProducto(e.target.value)}>
@@ -427,6 +433,7 @@ export default function ElementoPerfil() {
           </button>
         </div>
       </form>
+      )}
 
       <h2>Pedidos</h2>
       {pedidos.length === 0 && <p>Sin pedidos todavía.</p>}
