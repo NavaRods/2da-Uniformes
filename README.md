@@ -49,7 +49,7 @@ npm run emulators
 
 # Terminal 2 (la primera vez, o cuando el emulador arranque vacío):
 # crea un usuario Super Admin de prueba y una Unidad
-npm run seed:emulator tu-correo@ejemplo.com "2da Unidad"
+npm run seed:emulator tu-correo@ejemplo.com 2a
 
 # Terminal 2: la app
 npm install

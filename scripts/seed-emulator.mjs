@@ -15,7 +15,7 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 const PROJECT_ID = "da-unidad-6c88d";
 const correo = (process.argv[2] || "admin@local.test").trim().toLowerCase();
-const unidad = process.argv[3] || "2da Unidad";
+const unidad = process.argv[3] || "2a";
 
 initializeApp({ projectId: PROJECT_ID });
 const db = getFirestore();
