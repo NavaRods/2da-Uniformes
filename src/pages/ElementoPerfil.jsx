@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useLocation, Link } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { actualizarElemento } from "../lib/elementos";
@@ -13,6 +13,7 @@ import { veTodasLasUnidades, esSoloLectura } from "../lib/roles";
 import CuotaMensualidad from "../components/CuotaMensualidad";
 import { listenCuotas, resumenCuotas, etiquetaMes } from "../lib/cuotas";
 import PedidoCard from "../components/PedidoCard";
+import BotonVolver from "../components/BotonVolver";
 import FormElemento from "../components/FormElemento";
 import { formatearTelefono, normalizarTelefono10 } from "../lib/validacion";
 
@@ -204,7 +205,7 @@ export default function ElementoPerfil() {
 
   return (
     <div className="page">
-      <Link to="/elementos" className="volver">← Volver</Link>
+      <BotonVolver porDefecto="/elementos" etiquetaPorDefecto="Elementos" />
       <h1>
         {elemento.nombre}
         {elemento.fechaBaja && <span className="tag tag-baja">Baja {elemento.fechaBaja}</span>}

@@ -52,7 +52,7 @@ export const NOMBRES_PARTES = {
   abonos: "Abonos",
   cuotas: "Mensualidades",
   asistencias: "Listas de asistencia",
-  inventario: "Uniforme recibido",
+  inventario: "Uniformidad disponible",
 };
 
 // --- Valores de Firestore <-> JSON ---

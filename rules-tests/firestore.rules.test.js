@@ -637,3 +637,117 @@ describe("uniforme recibido (inventario)", () => {
     await assertSucceeds(lote.commit());
   });
 });
+
+describe("pedidos: cambios de talla/color", () => {
+  const pedirCambio = (db, extra = {}) =>
+    updateDoc(pedidoRef(db, "pedLimpio"), {
+      cambioPendiente: true,
+      motivoCambio: "Le queda chica",
+      cambioTalla: "12",
+      cambioColor: "",
+      ...ahora(),
+      ...extra,
+    });
+
+  it("se puede pedir un cambio con la talla nueva, pero la talla no cambia todavía", async () => {
+    const db = como(OP_A);
+    await assertSucceeds(pedirCambio(db));
+    await assertFails(updateDoc(pedidoRef(db, "pedLimpio"), { talla: "12", ...ahora() }));
+  });
+
+  it("al resolverlo la pieza pasa exactamente a la talla pedida", async () => {
+    const db = como(OP_A);
+    await assertSucceeds(pedirCambio(db));
+    const resolver = (extra) =>
+      updateDoc(pedidoRef(db, "pedLimpio"), {
+        cambioPendiente: false,
+        motivoCambio: "",
+        cambioTalla: deleteField(),
+        cambioColor: deleteField(),
+        articulo: "Pantalón — talla 12",
+        ...ahora(),
+        ...extra,
+      });
+    // Una talla distinta a la que traía el cambio se rechaza.
+    await assertFails(resolver({ talla: "14" }));
+    await assertSucceeds(resolver({ talla: "12", color: "" }));
+  });
+
+  it("sin un cambio pendiente no se puede tocar la talla ni el artículo", async () => {
+    const db = como(OP_A);
+    await assertFails(
+      updateDoc(pedidoRef(db, "pedLimpio"), {
+        talla: "12",
+        articulo: "Otro",
+        cambioPendiente: false,
+        ...ahora(),
+      })
+    );
+  });
+
+  it("resolver un cambio no permite cambiar el precio", async () => {
+    const db = como(OP_A);
+    await assertSucceeds(pedirCambio(db));
+    await assertFails(
+      updateDoc(pedidoRef(db, "pedLimpio"), {
+        cambioPendiente: false,
+        talla: "12",
+        color: "",
+        precioTotal: 1,
+        ...ahora(),
+      })
+    );
+  });
+
+  it("Estado Mayor no pide cambios", async () => {
+    await assertFails(pedirCambio(como(EM)));
+  });
+});
+
+describe("relaciones de pagos validadas", () => {
+  const rel = (db, id = "A~2026-09-20") => doc(db, "relaciones", id);
+  const datos = (extra) => ({
+    unidad: "A",
+    fecha: "2026-09-20",
+    total: 340,
+    piezas: [{ productoNombre: "Gorra", talla: "5", color: "", cantidad: 2, total: 340, recibido: 0 }],
+    mensualidades: [],
+    entregadoPor: "Ana",
+    entregadoEn: serverTimestamp(),
+    actualizadoEn: serverTimestamp(),
+    ...extra,
+  });
+
+  it("el Responsable valida la relación de su Unidad, no la de otra", async () => {
+    await assertSucceeds(setDoc(rel(como(OP_A)), datos()));
+    await assertFails(setDoc(rel(como(OP_A), "B~2026-09-20"), datos({ unidad: "B" })));
+  });
+
+  it("Estado Mayor la consulta pero no la escribe", async () => {
+    await setDoc(rel(como(OP_A)), datos());
+    await assertSucceeds(getDoc(rel(como(EM))));
+    await assertFails(setDoc(rel(como(EM)), datos()));
+  });
+
+  it("otra Unidad no la lee", async () => {
+    await setDoc(rel(como(OP_A)), datos());
+    await assertFails(getDoc(rel(como(OP_B))));
+  });
+
+  it("marcar piezas recibidas actualiza la relación sin cambiar Unidad ni día", async () => {
+    const db = como(OP_A);
+    await setDoc(rel(db), datos());
+    const piezas = [{ productoNombre: "Gorra", talla: "5", color: "", cantidad: 2, total: 340, recibido: 1 }];
+    await assertSucceeds(updateDoc(rel(db), { piezas, ...ahora() }));
+    await assertFails(updateDoc(rel(db), { unidad: "B", ...ahora() }));
+    await assertFails(updateDoc(rel(db), { fecha: "2026-09-21", ...ahora() }));
+  });
+
+  it("no acepta campos ajenos y solo un Admin la borra", async () => {
+    const db = como(OP_A);
+    await assertFails(setDoc(rel(db), datos({ extra: 1 })));
+    await setDoc(rel(db), datos());
+    await assertFails(deleteDoc(rel(db)));
+    await assertSucceeds(deleteDoc(rel(como(ADMIN))));
+  });
+});

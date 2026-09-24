@@ -4,8 +4,9 @@ import { fijarInventario, recibidoPorProducto } from "../lib/inventario";
 const etiquetaVariante = ({ talla, color }) =>
   [color, talla && `talla ${talla}`].filter(Boolean).join(", ") || "Sin talla";
 
-// "Uniforme recibido": lo que ya llegó y espera a entregarse. Se suma desde
-// Pendientes (Recibir) y se descuenta al marcar un pedido como entregado.
+// "Uniformidad disponible": lo que ya llegó del proveedor y espera a
+// entregarse. Se suma en la Relación General (Recibir) y se descuenta al
+// marcar un pedido como entregado.
 // Aquí solo se consulta y, si el conteo no cuadra, se corrige.
 // `puedeEditar`: false en solo lectura. `varias`: muestra la Unidad de cada línea.
 export default function UniformeRecibido({ inventario, puedeEditar, varias }) {
@@ -31,7 +32,7 @@ export default function UniformeRecibido({ inventario, puedeEditar, varias }) {
     <>
       <div className="tarjetas-resumen">
         <div className="card tarjeta-total">
-          <span className="ficha-etiqueta">Uniforme recibido</span>
+          <span className="ficha-etiqueta">Uniformidad disponible</span>
           <span className="total-monto">{total}</span>
           <span className="nota">
             {total === 1 ? "pieza lista" : "piezas listas"} para entregar
@@ -41,8 +42,8 @@ export default function UniformeRecibido({ inventario, puedeEditar, varias }) {
 
       {productos.length === 0 && (
         <p className="nota">
-          No hay uniforme recibido. Regístralo en Pendientes con el botón Recibir cuando te lo
-          entreguen.
+          No hay uniformidad disponible. Cuando el proveedor te entregue piezas, márcalas en Relación
+          de pagos → General con el botón Recibir.
         </p>
       )}
 

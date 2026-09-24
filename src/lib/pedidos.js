@@ -12,6 +12,7 @@ import {
   where,
   getDocs,
   writeBatch,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { vigilar, vigilarEscritura } from "./estadoFirestore";
@@ -104,7 +105,7 @@ export async function crearPedido(
 // detalle completo del movimiento.
 //
 // Con `inventario` ({ unidad, variante, piezas }) la pieza sale de (o, al
-// desmarcar, vuelve a) "Uniforme recibido" en el mismo lote, y el pedido
+// desmarcar, vuelve a) "Uniformidad disponible" en el mismo lote, y el pedido
 // guarda "descontoInventario" para saber si al desmarcarlo hay que regresarla.
 export async function marcarEntregado(elementoId, pedidoId, entregado, quienEntrego, inventario) {
   const pedidoRef = doc(db, "elementos", elementoId, "pedidos", pedidoId);
@@ -128,6 +129,95 @@ export async function marcarEntregado(elementoId, pedidoId, entregado, quienEntr
   );
   return vigilarEscritura(lote.commit());
 }
+
+// Texto de una pieza, con el mismo formato con que se crea el pedido.
+export const armarArticulo = ({ productoNombre, color, talla }) =>
+  [productoNombre, color, talla && `talla ${talla}`].filter(Boolean).join(" — ");
+
+// Pide un cambio: guarda el motivo y la talla/color que se quieren. Mientras
+// esté pendiente, la pieza nueva cuenta como pendiente en la Relación de
+// pagos (por recibir y por entregar) y el cambio aparece en Uniformidad.
+export async function solicitarCambio(elementoId, pedidoId, { motivo, talla, color }) {
+  return vigilarEscritura(
+    updateDoc(doc(db, "elementos", elementoId, "pedidos", pedidoId), {
+      cambioPendiente: true,
+      motivoCambio: motivo || "",
+      cambioTalla: talla ?? "",
+      cambioColor: color ?? "",
+      fechaCambioSolicitado: serverTimestamp(),
+      ...marcaActualizacion(),
+    })
+  );
+}
+
+// Cancela un cambio pedido (se arrepintieron o fue un error): el pedido queda
+// como estaba.
+export async function cancelarCambio(elementoId, pedidoId) {
+  return vigilarEscritura(
+    updateDoc(doc(db, "elementos", elementoId, "pedidos", pedidoId), {
+      cambioPendiente: false,
+      motivoCambio: "",
+      cambioTalla: deleteField(),
+      cambioColor: deleteField(),
+      fechaCambioSolicitado: null,
+      ...marcaActualizacion(),
+    })
+  );
+}
+
+// Resuelve un cambio de una sola vez (todo en un mismo lote):
+//  - el pedido pasa a la talla/color nuevos (con su texto);
+//  - si la pieza nueva se entrega ahora (entregarAhora), queda entregada y
+//    sale de "Uniformidad disponible" (descontarNueva);
+//  - la pieza devuelta regresa a "Uniformidad disponible" (devolverAnterior).
+// anterior y nueva son { productoNombre, talla, color }.
+export async function resolverCambio({
+  elementoId,
+  pedidoId,
+  unidad,
+  anterior,
+  nueva,
+  piezas,
+  quien,
+  entregarAhora,
+  descontarNueva,
+  devolverAnterior,
+}) {
+  const pedidoRef = doc(db, "elementos", elementoId, "pedidos", pedidoId);
+  const lote = writeBatch(db);
+  lote.update(pedidoRef, {
+    talla: nueva.talla,
+    color: nueva.color,
+    articulo: armarArticulo(nueva),
+    entregado: !!entregarAhora,
+    fechaEntrega: entregarAhora ? serverTimestamp() : null,
+    quienEntrego: entregarAhora ? quien || "" : "",
+    descontoInventario: !!(entregarAhora && descontarNueva),
+    cambioPendiente: false,
+    motivoCambio: "",
+    cambioTalla: deleteField(),
+    cambioColor: deleteField(),
+    fechaCambioSolicitado: null,
+    ...marcaActualizacion(),
+  });
+  // Si la pieza nueva y la devuelta son la misma variante (p. ej. un defecto),
+  // lo que entra y lo que sale se anulan y no hay movimiento.
+  const mismaVariante = claveDe(anterior) === claveDe(nueva);
+  const sale = entregarAhora && descontarNueva ? piezas : 0;
+  const entra = devolverAnterior ? piezas : 0;
+  if (mismaVariante) {
+    const neto = entra - sale;
+    if (neto !== 0) {
+      lote.set(refInventario(unidad, nueva), cambioInventario(unidad, nueva, neto), { merge: true });
+    }
+  } else {
+    if (sale) lote.set(refInventario(unidad, nueva), cambioInventario(unidad, nueva, -sale), { merge: true });
+    if (entra) lote.set(refInventario(unidad, anterior), cambioInventario(unidad, anterior, entra), { merge: true });
+  }
+  return vigilarEscritura(lote.commit());
+}
+
+const claveDe = ({ productoNombre, talla, color }) => `${productoNombre}|${talla || ""}|${color || ""}`;
 
 // Marca (o resuelve) que una pieza necesita cambio (talla/color equivocado,
 // defecto, etc). Mientras cambioPendiente sea true, la pieza queda marcada

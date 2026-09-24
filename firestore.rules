@@ -248,7 +248,7 @@ service cloud.firestore {
           "precioTotal", "saldoPendiente", "entregado", "quienEntrego",
           "fechaEntrega", "cambioPendiente", "motivoCambio",
           "fechaCambioSolicitado", "ultimoAbonoId", "creadoEn", "unidad",
-          "actualizadoEn", "descontoInventario"
+          "actualizadoEn", "descontoInventario", "cambioTalla", "cambioColor"
         ]) &&
         // Hora del servidor de esta escritura: los pedidos de una Unidad se
         // sincronizan por cambios (src/lib/sincronia.js), igual que los
@@ -279,12 +279,27 @@ service cloud.firestore {
       // Campos de un pedido que sí pueden cambiar después de creado. El precio,
       // el artículo, la fecha de creación, etc. quedan fijos.
       function pedidoSoloCambiaPermitido(antes, despues) {
-        return despues.diff(antes).affectedKeys().hasOnly([
+        let cambios = despues.diff(antes).affectedKeys();
+        return cambios.hasOnly([
           "entregado", "quienEntrego", "fechaEntrega",
           "cambioPendiente", "motivoCambio", "fechaCambioSolicitado",
           "saldoPendiente", "ultimoAbonoId", "unidad", "actualizadoEn",
-          "descontoInventario"
-        ]);
+          "descontoInventario", "cambioTalla", "cambioColor"
+        ]) ||
+        // Al resolver un cambio la pieza se ajusta a lo que se pidió (talla y
+        // color nuevos, con su texto "articulo"): solo en ese paso, cuando el
+        // cambio estaba pendiente y ya no lo queda, y solo a la talla y el
+        // color que traía el cambio. El precio y el producto no cambian.
+        (antes.get("cambioPendiente", false) == true &&
+          despues.get("cambioPendiente", false) == false &&
+          cambios.hasOnly([
+            "entregado", "quienEntrego", "fechaEntrega",
+            "cambioPendiente", "motivoCambio", "fechaCambioSolicitado",
+            "unidad", "actualizadoEn", "descontoInventario",
+            "cambioTalla", "cambioColor", "talla", "color", "articulo"
+          ]) &&
+          despues.talla == antes.get("cambioTalla", antes.talla) &&
+          despues.color == antes.get("cambioColor", antes.color));
       }
 
       // --- Cuotas (mensualidades pagadas) de un elemento ---
@@ -499,6 +514,34 @@ service cloud.firestore {
           request.resource.data.color == resource.data.color &&
           puedeEscribirUnidad(resource.data.unidad));
       allow delete: if puedeEscribirUnidad(resource.data.unidad);
+    }
+
+    // --- Relaciones de pagos validadas (ver src/lib/relaciones.js) ---
+    // Un doc por Unidad y día: el resumen de lo cobrado, la validación de la
+    // entrega del dinero y las piezas que va entregando el proveedor.
+    function relacionValida(datos) {
+      return datos.keys().hasOnly([
+        "unidad", "fecha", "total", "totalUniformes", "totalMensualidades",
+        "mesesCobrados", "piezas", "mensualidades", "entregadoPor",
+        "entregadoEn", "actualizadoEn"
+      ]) &&
+      datos.unidad is string && datos.unidad.size() > 0 &&
+      datos.fecha is string &&
+      datos.total is number &&
+      datos.piezas is list &&
+      datos.mensualidades is list &&
+      datos.actualizadoEn == request.time;
+    }
+
+    match /relaciones/{relacionId} {
+      allow read: if puedeVerUnidad(resource.data.unidad);
+      allow create: if relacionValida(request.resource.data) &&
+        puedeEscribirUnidad(request.resource.data.unidad);
+      allow update: if relacionValida(request.resource.data) &&
+        request.resource.data.unidad == resource.data.unidad &&
+        request.resource.data.fecha == resource.data.fecha &&
+        puedeEscribirUnidad(resource.data.unidad);
+      allow delete: if esAdmin();
     }
 
     match /{path=**}/porUnidad/{unidadId} {

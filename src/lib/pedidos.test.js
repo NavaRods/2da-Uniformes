@@ -49,6 +49,7 @@ vi.mock("firebase/firestore", () => ({
   getDoc: (...args) => getDoc(...args),
   getDocs: (...args) => getDocs(...args),
   writeBatch: () => batch,
+  deleteField: () => "DELETE_FIELD",
   setDoc: vi.fn(),
 }));
 
@@ -65,6 +66,10 @@ const {
   crearPedido,
   marcarEntregado,
   marcarCambioPendiente,
+  solicitarCambio,
+  cancelarCambio,
+  resolverCambio,
+  armarArticulo,
   registrarAbono,
   eliminarPedido,
   listenPedidosDeUnidad,
@@ -123,7 +128,7 @@ describe("marcarEntregado", () => {
     expect(datos.fechaEntrega).toBeNull();
   });
 
-  it("con inventario, descuenta la pieza de Uniforme recibido en el mismo lote", async () => {
+  it("con inventario, descuenta la pieza de Uniformidad disponible en el mismo lote", async () => {
     const variante = { productoNombre: "Gorra", talla: "5", color: "" };
     await marcarEntregado("el1", "ped1", true, "Carlos", { unidad: "1a", variante, piezas: 2 });
     const [, datos] = batch.update.mock.calls[0];
@@ -135,7 +140,7 @@ describe("marcarEntregado", () => {
     expect(batch.commit).toHaveBeenCalled();
   });
 
-  it("al desmarcar una pieza descontada, la regresa a Uniforme recibido", async () => {
+  it("al desmarcar una pieza descontada, la regresa a Uniformidad disponible", async () => {
     const variante = { productoNombre: "Gorra", talla: "5", color: "" };
     await marcarEntregado("el1", "ped1", false, "Carlos", { unidad: "1a", variante, piezas: 1 });
     expect(batch.update.mock.calls[0][1].descontoInventario).toBe(false);
@@ -313,5 +318,78 @@ describe("sinBorrados", () => {
 
   it("un pedido antiguo sin actualizadoEn con baja también se quita", () => {
     expect(sinBorrados([pedido("p1", undefined)], [{ id: "e1_p1", en: ts(1) }])).toEqual([]);
+  });
+});
+
+describe("cambios de talla/color", () => {
+  beforeEach(() => {
+    batch.set.mockClear();
+    batch.update.mockClear();
+    batch.commit.mockClear();
+    updateDoc.mockClear();
+  });
+
+  const anterior = { productoNombre: "Playera", talla: "M", color: "Blanca" };
+  const nueva = { productoNombre: "Playera", talla: "G", color: "Blanca" };
+  const base = { elementoId: "el1", pedidoId: "p1", unidad: "2a", anterior, nueva, piezas: 1, quien: "Ana" };
+
+  it("armarArticulo usa el mismo formato con el que se crea el pedido", () => {
+    expect(armarArticulo(nueva)).toBe("Playera — Blanca — talla G");
+    expect(armarArticulo({ productoNombre: "Gorra", talla: "", color: "" })).toBe("Gorra");
+  });
+
+  it("solicitarCambio guarda el motivo y la talla/color pedidos", async () => {
+    await solicitarCambio("el1", "p1", { motivo: "Le queda chica", talla: "G", color: "Blanca" });
+    const [, cambios] = updateDoc.mock.calls[0];
+    expect(cambios).toMatchObject({
+      cambioPendiente: true,
+      motivoCambio: "Le queda chica",
+      cambioTalla: "G",
+      cambioColor: "Blanca",
+    });
+  });
+
+  it("cancelarCambio deja el pedido como estaba", async () => {
+    await cancelarCambio("el1", "p1");
+    const [, cambios] = updateDoc.mock.calls[0];
+    expect(cambios).toMatchObject({ cambioPendiente: false, cambioTalla: "DELETE_FIELD", cambioColor: "DELETE_FIELD" });
+  });
+
+  it("resolver con pieza nueva en existencia: ajusta el pedido, descuenta la nueva y regresa la devuelta", async () => {
+    await resolverCambio({ ...base, entregarAhora: true, descontarNueva: true, devolverAnterior: true });
+    const [, pedido] = batch.update.mock.calls[0];
+    expect(pedido).toMatchObject({
+      talla: "G",
+      articulo: "Playera — Blanca — talla G",
+      entregado: true,
+      cambioPendiente: false,
+      descontoInventario: true,
+      cambioTalla: "DELETE_FIELD",
+    });
+    // Un movimiento de inventario por variante: sale la nueva, entra la anterior.
+    expect(increment).toHaveBeenCalledWith(-1);
+    expect(increment).toHaveBeenCalledWith(1);
+    expect(batch.set).toHaveBeenCalledTimes(2);
+    expect(batch.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolver sin entregar todavía: ajusta el pedido y no descuenta nada", async () => {
+    increment.mockClear();
+    await resolverCambio({ ...base, entregarAhora: false, descontarNueva: true, devolverAnterior: false });
+    const [, pedido] = batch.update.mock.calls[0];
+    expect(pedido).toMatchObject({ entregado: false, descontoInventario: false, talla: "G" });
+    expect(batch.set).not.toHaveBeenCalled();
+    expect(increment).not.toHaveBeenCalled();
+  });
+
+  it("misma variante (defecto): entra y sale se anulan y no hay movimiento", async () => {
+    await resolverCambio({
+      ...base,
+      anterior: nueva,
+      entregarAhora: true,
+      descontarNueva: true,
+      devolverAnterior: true,
+    });
+    expect(batch.set).not.toHaveBeenCalled();
   });
 });

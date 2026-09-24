@@ -12,10 +12,10 @@ import { db } from "../firebase";
 import { vigilar, vigilarEscritura } from "./estadoFirestore";
 import { claveVariante } from "./relacionPagos";
 
-// "Uniforme recibido": las piezas que ya llegaron (del proveedor) y están
+// "Uniformidad disponible": las piezas que ya llegaron (del proveedor) y están
 // guardadas esperando a entregarse. Un documento por Unidad, producto, talla
 // y color: inventario/{id} con { unidad, productoNombre, talla, color,
-// cantidad }. Se suma al recibir (pestaña Pendientes) y se descuenta al marcar
+// cantidad }. Se suma al recibir (Relación de pagos → General) y se descuenta al marcar
 // un pedido como entregado.
 
 

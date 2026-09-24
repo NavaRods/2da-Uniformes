@@ -2,16 +2,18 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { formatoMoneda } from "../lib/format";
 import { normalizar } from "../lib/busqueda";
+import { useDesde } from "../lib/navegacion";
 import { ESTADOS_UNIFORME, resumenRelacion } from "../lib/relacionPagos";
 import PedidoCard from "./PedidoCard";
 import BarraPagado from "./BarraPagado";
 
+// [clave, nombre en el botón, qué muestra (se lee bajo los botones)]
 const FILTROS = [
-  ["todos", "Todos"],
-  ["debe", "Deben"],
-  ["sin-entregar", "Falta entregar"],
-  ["al-corriente", "Al corriente"],
-  ["sin-pedidos", "Sin uniformes"],
+  ["todos", "Todos", "Todos los elementos de la Unidad."],
+  ["debe", "Deben", "Elementos con dinero pendiente de pagar por sus uniformes."],
+  ["sin-entregar", "Falta entregar", "Elementos con piezas que aún no se les entregan."],
+  ["al-corriente", "Al corriente", "Elementos que ya pagaron todo y ya recibieron todo."],
+  ["sin-pedidos", "Sin uniformes", "Elementos que no han pedido ningún uniforme."],
 ];
 
 const CLASE_ESTADO = {
@@ -32,6 +34,7 @@ const detallePieza = (f) =>
 // relacionPorElemento; `pedidosPorId` y `elementosPorId` dan los datos
 // completos para la tarjeta de cada pieza (cobrar, entregar, ver sus pagos).
 export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPorId }) {
+  const desde = useDesde();
   const [filtro, setFiltro] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
   const [abierto, setAbierto] = useState(null); // elementoId desplegado
@@ -98,6 +101,7 @@ export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPor
         </div>
       </div>
 
+      <p className="filtros-titulo">¿A quiénes quieres ver?</p>
       <div className="filtros">
         {FILTROS.map(([clave, etiqueta]) => (
           <button
@@ -111,6 +115,7 @@ export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPor
           </button>
         ))}
       </div>
+      <p className="ayuda">{FILTROS.find(([clave]) => clave === filtro)[2]}</p>
       <input
         className="buscador"
         type="search"
@@ -165,7 +170,7 @@ export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPor
                       {formatoMoneda(g.pagado)} de {formatoMoneda(g.valorTotal)}
                     </span>
                     <span className="relacion-flecha" aria-hidden="true">
-                      {estaAbierto ? "▲" : "▼"}
+                      {estaAbierto ? "Ocultar piezas ▲" : "Ver piezas ▼"}
                     </span>
                   </span>
                 )}
@@ -173,6 +178,17 @@ export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPor
                   <BarraPagado fila={{ pagado: g.pagado, precioTotal: g.valorTotal }} />
                 )}
               </button>
+
+              <div className="relacion-acciones">
+                {g.piezas === 0 && <span className="nota">Sin uniformes pedidos.</span>}
+                <Link
+                  to={`/elementos/${g.elementoId}`}
+                  state={{ unidad: elemento.unidad, ...desde }}
+                  className="btn-secondary btn-small"
+                >
+                  👤 Ver perfil
+                </Link>
+              </div>
 
               {estaAbierto && (
                 <div className="relacion-detalle">
@@ -218,9 +234,6 @@ export default function RelacionPorElemento({ grupos, pedidosPorId, elementosPor
                       );
                     })}
                   </ul>
-                  <Link to={`/elementos/${g.elementoId}`} className="volver relacion-perfil">
-                    Ver perfil completo →
-                  </Link>
                 </div>
               )}
             </li>

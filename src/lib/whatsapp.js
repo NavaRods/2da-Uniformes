@@ -35,14 +35,28 @@ export function mensajeEntrega({ nombre, articulo, entregado, quienEntrego }) {
   );
 }
 
-export function mensajeCambioPendiente({ nombre, articulo, pendiente, motivo }) {
+// `nueva` (opcional): texto de la pieza que se pidió a cambio.
+export function mensajeCambioPendiente({ nombre, articulo, pendiente, motivo, nueva }) {
   const { fecha, hora } = fechaHoraActual();
   const estado = pendiente
-    ? `Tu pieza "${articulo}" quedó marcada como CAMBIO PENDIENTE.${
-        motivo ? ` Motivo: ${motivo}.` : ""
-      }`
+    ? `Tu pieza "${articulo}" quedó marcada como CAMBIO PENDIENTE${
+        nueva ? ` por "${nueva}"` : ""
+      }.${motivo ? ` Motivo: ${motivo}.` : ""} Te avisamos cuando esté lista.`
     : `Tu pieza "${articulo}" ya no tiene cambio pendiente, quedó resuelta.`;
   return `Hola ${nombre}, ${estado}\nFecha y hora: ${fecha} ${hora}`;
+}
+
+// Cambio resuelto: se entregó (o quedó ajustada) la pieza nueva.
+export function mensajeCambioResuelto({ nombre, anterior, nueva, entregada, quienEntrego }) {
+  const { fecha, hora } = fechaHoraActual();
+  const estado = entregada
+    ? `tu cambio quedó resuelto: se te entregó "${nueva}" en lugar de "${anterior}".`
+    : `tu cambio quedó ajustado a "${nueva}" (antes "${anterior}"). Te avisamos cuando puedas recogerla.`;
+  return (
+    `Hola ${nombre}, ${estado}\n` +
+    (entregada ? `Entregó: ${quienEntrego || "—"}\n` : "") +
+    `Fecha y hora: ${fecha} ${hora}`
+  );
 }
 
 // Deja un número listo para wa.me: solo dígitos y con código de país. Un
@@ -69,10 +83,6 @@ function pesos(monto) {
   return `$${conPuntos}${decimales ? "," + decimales : ""}`;
 }
 
-function piezas(n) {
-  return `${n} ${n === 1 ? "pieza" : "piezas"}`;
-}
-
 // "Playera Negra (M)": producto, color si lo hay y talla entre paréntesis.
 function nombrePieza({ productoNombre, color, talla }) {
   return `${productoNombre}${color ? ` ${color}` : ""}${talla ? ` (${talla})` : ""}`;
@@ -91,7 +101,7 @@ export function mensajeRelacionDia({ fechaEtiqueta, resumen }) {
 
   if (resumen.general.length > 0) {
     const lineas = resumen.general.map(
-      (g, i) => `${i + 1}. (${pesos(g.total)}) ${nombrePieza(g)} -> ${piezas(g.cantidad)}`
+      (g, i) => `${i + 1}. (${pesos(g.total)}) ${nombrePieza(g)} - Piezas ${g.cantidad}`
     );
     partes.push(`Detalles (Uniformidad):\n\n${lineas.join("\n")}`);
   }

@@ -3,27 +3,29 @@ import {
   listenAbonosDePedido,
   registrarAbono,
   marcarEntregado,
-  marcarCambioPendiente,
+  cancelarCambio,
   eliminarPedido,
 } from "../lib/pedidos";
 import {
-  linkWhatsapp,
   mensajeComprobante,
   mensajeEntrega,
   mensajeCambioPendiente,
+  mensajeCambioResuelto,
 } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
 import { esAdmin, esSoloLectura } from "../lib/roles";
 import { useInventario } from "../lib/fuentes";
 import { claveVariante } from "../lib/relacionPagos";
 import { existenciasPorVariante } from "../lib/inventario";
+import { formatoMoneda } from "../lib/format";
+import { useAviso } from "./AvisoProvider";
+import BarraPagado from "./BarraPagado";
+import SolicitarCambio from "./SolicitarCambio";
+import ResolverCambio from "./ResolverCambio";
 
-function avisar(elemento, mensaje) {
-  const telefono = elemento.telefonos?.[0];
-  if (!telefono) return;
-  window.open(linkWhatsapp(telefono, mensaje), "_blank");
-}
-
+// Una pieza (pedido) de un elemento, en tres bloques: Pago, Entrega y Cambio.
+// Nada se avisa por WhatsApp solo: después de registrar un pago, una entrega o
+// un cambio se ofrece el aviso (AvisoWhatsapp) y la persona decide si enviarlo.
 export default function PedidoCard({ cliente: elemento, pedido }) {
   const { user, perfil } = useAuth();
   const soloLectura = esSoloLectura(perfil);
@@ -34,18 +36,19 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
   const [abonos, setAbonos] = useState([]);
   const [verHistorial, setVerHistorial] = useState(false);
   const [monto, setMonto] = useState("");
-  const [motivoCambio, setMotivoCambio] = useState("");
-  const [mostrarFormCambio, setMostrarFormCambio] = useState(false);
   const [error, setError] = useState("");
+  const [confirmarEntrega, setConfirmarEntrega] = useState(null); // "entregar" | "deshacer"
+  const [guardando, setGuardando] = useState(false);
+  const [pidiendoCambio, setPidiendoCambio] = useState(false);
+  const [resolviendo, setResolviendo] = useState(false);
+  const mostrarAviso = useAviso();
+
   const unidad = pedido.unidad || elemento.unidad;
   const inventario = useInventario(soloLectura ? null : unidad);
-  const variante = {
-    productoNombre: pedido.productoNombre || pedido.articulo,
-    talla: pedido.talla || "",
-    color: pedido.color || "",
-  };
+  const producto = pedido.productoNombre || pedido.articulo;
+  const varianteActual = { productoNombre: producto, talla: pedido.talla || "", color: pedido.color || "" };
   const piezas = Number(pedido.cantidad) || 1;
-  const recibidas = existenciasPorVariante(inventario).get(claveVariante(variante)) || 0;
+  const recibidas = existenciasPorVariante(inventario).get(claveVariante(varianteActual)) || 0;
 
   // Los abonos se leen solo si se abre el historial (antes se leían siempre,
   // por cada pedido de la lista).
@@ -53,106 +56,94 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
     if (verHistorial) return listenAbonosDePedido(elemento.id, pedido.id, setAbonos);
   }, [verHistorial, elemento.id, pedido.id]);
 
+  // Lo abonado = precio - saldo (cada abono descuenta del saldo): no hace falta leer los abonos.
+  const totalAbonado = Math.max((pedido.precioTotal || 0) - (pedido.saldoPendiente || 0), 0);
+  const liquidado = pedido.saldoPendiente <= 0;
+
   // Cada abono se sigue acumulando hasta que el saldo llega a 0: el pedido
   // no se "cierra" a mano, el estado de liquidado sale directo del saldo.
   async function onAbonar(e) {
     e.preventDefault();
-    if (!monto) return;
-    await registrarAbono(elemento.id, pedido.id, {
-      monto,
-      quienRecibio: quien,
-      unidad: elemento.unidad,
-      elementoNombre: elemento.nombre,
-      pedido,
-    });
-
+    if (!(Number(monto) > 0)) return;
+    setError("");
+    setGuardando(true);
+    try {
+      await registrarAbono(elemento.id, pedido.id, {
+        monto,
+        quienRecibio: quien,
+        unidad: elemento.unidad,
+        elementoNombre: elemento.nombre,
+        pedido,
+      });
+    } catch {
+      setError("No se pudo registrar el pago. Verifica tu conexión e inténtalo de nuevo.");
+      setGuardando(false);
+      return;
+    }
     const saldoPendiente = pedido.saldoPendiente - Number(monto);
-    avisar(
+    mostrarAviso({
       elemento,
-      mensajeComprobante({
+      titulo: "Pago registrado",
+      mensaje: mensajeComprobante({
         nombre: elemento.nombre,
         articulo: pedido.articulo,
         monto,
         saldoPendiente,
         quienRecibio: quien,
-      })
-    );
-
+      }),
+    });
     setMonto("");
+    setGuardando(false);
   }
 
-  // Al entregar, la pieza sale de "Uniforme recibido"; si no hay, se pregunta
-  // (se puede entregar igual, sin descontar). Al desmarcar, regresa solo si
-  // se había descontado.
-  async function onEntregar(entregado) {
+  // Al entregar, la pieza sale de "Uniformidad disponible"; si no hay, se entrega
+  // igual sin descontar (la confirmación lo avisa). Al deshacer, regresa solo
+  // si se había descontado.
+  async function ejecutarEntrega(entregado) {
     let inventarioMov = null;
     if (entregado) {
-      if (recibidas >= piezas) {
-        inventarioMov = { unidad, variante, piezas };
-      } else if (
-        !confirm(
-          `No hay "${pedido.articulo}" suficiente en Uniforme recibido (hay ${recibidas}, se ` +
-            `necesitan ${piezas}). ¿Marcarlo como entregado de todos modos? No se descontará nada.`
-        )
-      ) {
-        return;
-      }
+      if (recibidas >= piezas) inventarioMov = { unidad, variante: varianteActual, piezas };
     } else if (pedido.descontoInventario) {
-      inventarioMov = { unidad, variante, piezas };
+      inventarioMov = { unidad, variante: varianteActual, piezas };
     }
     setError("");
+    setGuardando(true);
     try {
       await marcarEntregado(elemento.id, pedido.id, entregado, quien, inventarioMov);
     } catch {
       setError("No se pudo guardar la entrega. Verifica tu conexión e inténtalo de nuevo.");
+      setGuardando(false);
+      setConfirmarEntrega(null);
       return;
     }
-    avisar(
+    setConfirmarEntrega(null);
+    setGuardando(false);
+    mostrarAviso({
       elemento,
-      mensajeEntrega({
+      titulo: entregado ? "Entrega registrada" : "Entrega cancelada",
+      mensaje: mensajeEntrega({
         nombre: elemento.nombre,
         articulo: pedido.articulo,
         entregado,
         quienEntrego: quien,
-      })
-    );
+      }),
+    });
   }
 
-  async function onMarcarCambio(e) {
-    e.preventDefault();
-    await marcarCambioPendiente(elemento.id, pedido.id, true, motivoCambio);
-    avisar(
-      elemento,
-      mensajeCambioPendiente({
-        nombre: elemento.nombre,
-        articulo: pedido.articulo,
-        pendiente: true,
-        motivo: motivoCambio,
-      })
-    );
-    setMotivoCambio("");
-    setMostrarFormCambio(false);
+  async function onCancelarCambio() {
+    if (!confirm("¿Cancelar el cambio? La pieza se queda como estaba.")) return;
+    setError("");
+    try {
+      await cancelarCambio(elemento.id, pedido.id);
+    } catch {
+      setError("No se pudo cancelar el cambio. Verifica tu conexión e inténtalo de nuevo.");
+    }
   }
-
-  async function onResolverCambio() {
-    await marcarCambioPendiente(elemento.id, pedido.id, false, "");
-    avisar(
-      elemento,
-      mensajeCambioPendiente({
-        nombre: elemento.nombre,
-        articulo: pedido.articulo,
-        pendiente: false,
-      })
-    );
-  }
-
-  // Lo abonado = precio - saldo (cada abono descuenta del saldo): no hace falta leer los abonos.
-  const totalAbonado = Math.max((pedido.precioTotal || 0) - (pedido.saldoPendiente || 0), 0);
 
   async function onEliminar() {
     const aviso =
       totalAbonado > 0
-        ? `Se eliminarán también los pagos registrados en este pedido ($${totalAbonado}) y dejarán de aparecer en la Relación de pagos.`
+        ? `Se eliminarán también los pagos registrados en este pedido (${formatoMoneda(totalAbonado)}) y dejarán de aparecer en la Relación de pagos.`
         : "Este pedido no tiene pagos registrados.";
     if (!confirm(`¿Eliminar "${pedido.articulo}"? ${aviso} Esta acción no se puede deshacer.`)) {
       return;
@@ -165,116 +156,220 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
     }
   }
 
-  const liquidado = pedido.saldoPendiente <= 0;
-
+  const textoNueva = [producto, pedido.cambioColor ?? pedido.color, (pedido.cambioTalla ?? pedido.talla) && `talla ${pedido.cambioTalla ?? pedido.talla}`]
+    .filter(Boolean)
+    .join(" — ");
 
   return (
-    <div className="card">
-      <h3>
-        {pedido.articulo} — ${pedido.precioTotal}
-      </h3>
-      <p>
-        Estado: {liquidado ? "Liquidado ✅" : `Debe $${pedido.saldoPendiente}`}
-      </p>
+    <div className="card pedido-card">
+      <div className="pedido-cabecera">
+        <h3>{pedido.articulo}</h3>
+        <strong className="pedido-precio">{formatoMoneda(pedido.precioTotal)}</strong>
+      </div>
+
+      <div className="pedido-estados">
+        <span className={`insignia ${liquidado ? "insignia-ok" : "insignia-abono"}`}>
+          {liquidado ? "Pagado" : `Debe ${formatoMoneda(pedido.saldoPendiente)}`}
+        </span>
+        <span className={`insignia ${pedido.entregado ? "insignia-ok" : "insignia-cuota"}`}>
+          {pedido.entregado ? "Entregado" : "Sin entregar"}
+        </span>
+        {pedido.cambioPendiente && <span className="insignia insignia-abono">Cambio pendiente</span>}
+      </div>
 
       {error && <p className="error">{error}</p>}
 
-      {pedido.cambioPendiente && (
-        <p className="aviso-cambio">
-          🔁 Cambio pendiente{pedido.motivoCambio ? `: ${pedido.motivoCambio}` : ""}
+      <section className="pedido-seccion">
+        <h4>💵 Pago</h4>
+        <BarraPagado fila={{ pagado: totalAbonado, precioTotal: pedido.precioTotal }} />
+        <p className="nota">
+          Pagado {formatoMoneda(totalAbonado)} de {formatoMoneda(pedido.precioTotal)}
         </p>
-      )}
+        {!soloLectura && !liquidado && (
+          <form onSubmit={onAbonar} className="fila-formulario">
+            <input
+              placeholder="¿Cuánto paga? ($)"
+              type="number"
+              inputMode="decimal"
+              min="1"
+              max={pedido.saldoPendiente}
+              value={monto}
+              onChange={(e) => setMonto(e.target.value)}
+              aria-label="Monto del pago"
+            />
+            <button type="submit" className="btn-primary" disabled={guardando || !(Number(monto) > 0)}>
+              Registrar pago
+            </button>
+          </form>
+        )}
+        {totalAbonado > 0 && (
+          <details onToggle={(e) => setVerHistorial(e.currentTarget.open)}>
+            <summary>Ver pagos anteriores</summary>
+            <ul>
+              {abonos.map((a) => (
+                <li key={a.id}>
+                  {formatoMoneda(a.monto)} — {a.fechaLocal} {a.horaLocal || ""} — {a.quienRecibio}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
 
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          checked={!!pedido.entregado}
-          onChange={(e) => onEntregar(e.target.checked)}
-          disabled={soloLectura}
-        />
-        Entregado
-        {pedido.entregado && pedido.quienEntrego ? ` (por ${pedido.quienEntrego})` : ""}
-      </label>
-      {!pedido.entregado && !soloLectura && (
-        <p className="nota nota-recibido">
-          {recibidas > 0
-            ? `En Uniforme recibido: ${recibidas}`
-            : "No hay en Uniforme recibido"}
+      <section className="pedido-seccion">
+        <h4>📦 Entrega</h4>
+        <p>
+          {pedido.entregado
+            ? `Entregada${pedido.quienEntrego ? ` por ${pedido.quienEntrego}` : ""}.`
+            : "Todavía no se entrega."}
         </p>
-      )}
+        {!pedido.entregado && !soloLectura && (
+          <p className="nota nota-recibido">
+            {recibidas > 0 ? `En Uniformidad disponible: ${recibidas}` : "No hay en Uniformidad disponible"}
+          </p>
+        )}
+        {!soloLectura &&
+          (pedido.entregado ? (
+            <button type="button" className="btn-secondary" onClick={() => setConfirmarEntrega("deshacer")}>
+              Deshacer entrega
+            </button>
+          ) : (
+            <button type="button" className="btn-primary" onClick={() => setConfirmarEntrega("entregar")}>
+              Entregar pieza
+            </button>
+          ))}
+      </section>
 
-      {!soloLectura && !liquidado && (
-        <form onSubmit={onAbonar} className="inline-form">
-          <input
-            placeholder="Monto del abono"
-            type="number"
-            value={monto}
-            onChange={(e) => setMonto(e.target.value)}
+      <section className="pedido-seccion">
+        <h4>🔁 Cambio</h4>
+        {pedido.cambioPendiente ? (
+          <>
+            <p className="aviso-cambio">
+              {textoNueva === pedido.articulo ? (
+                "Cambio pendiente de esta misma pieza (misma talla y color)."
+              ) : (
+                <>
+                  Cambio pendiente: {pedido.articulo} <span aria-hidden="true">→</span> {textoNueva}
+                </>
+              )}
+            </p>
+            {pedido.motivoCambio && <p className="nota">Motivo: {pedido.motivoCambio}</p>}
+            {!soloLectura && (
+              <div className="acciones-fila">
+                <button type="button" className="btn-secondary" onClick={onCancelarCambio}>
+                  Cancelar cambio
+                </button>
+                <button type="button" className="btn-primary" onClick={() => setResolviendo(true)}>
+                  Resolver cambio
+                </button>
+              </div>
+            )}
+          </>
+        ) : pidiendoCambio ? (
+          <SolicitarCambio
+            elementoId={elemento.id}
+            pedido={pedido}
+            onCancelar={() => setPidiendoCambio(false)}
+            onSolicitado={({ motivo, nueva }) => {
+              setPidiendoCambio(false);
+              mostrarAviso({
+      elemento,
+                titulo: "Cambio registrado",
+                mensaje: mensajeCambioPendiente({
+                  nombre: elemento.nombre,
+                  articulo: pedido.articulo,
+                  pendiente: true,
+                  motivo,
+                  nueva,
+                }),
+              });
+            }}
           />
-          <button type="submit" className="btn-primary">
-            Registrar pago y avisar por WhatsApp
-          </button>
-        </form>
-      )}
-
-      {!soloLectura && !pedido.cambioPendiente && !mostrarFormCambio && (
-        <button
-          type="button"
-          className="btn-secondary btn-small"
-          onClick={() => setMostrarFormCambio(true)}
-        >
-          🔁 Marcar cambio pendiente
-        </button>
-      )}
-
-      {mostrarFormCambio && (
-        <form onSubmit={onMarcarCambio} className="inline-form">
-          <input
-            placeholder="Motivo del cambio (talla, color, defecto...)"
-            value={motivoCambio}
-            onChange={(e) => setMotivoCambio(e.target.value)}
-          />
-          <button type="submit" className="btn-primary">
-            Confirmar
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => setMostrarFormCambio(false)}
-          >
-            Cancelar
-          </button>
-        </form>
-      )}
-
-      {!soloLectura && pedido.cambioPendiente && (
-        <button
-          type="button"
-          className="btn-secondary btn-small"
-          onClick={onResolverCambio}
-        >
-          ✅ Marcar cambio resuelto
-        </button>
-      )}
+        ) : (
+          !soloLectura && (
+            <button type="button" className="btn-secondary" onClick={() => setPidiendoCambio(true)}>
+              Pedir cambio de talla o color
+            </button>
+          )
+        )}
+        {soloLectura && !pedido.cambioPendiente && <p className="nota">Sin cambios pedidos.</p>}
+      </section>
 
       {puedeEliminar && (
-        <button type="button" className="btn-secondary btn-small" onClick={onEliminar}>
-          🗑️ Eliminar pedido
+        <button type="button" className="btn-secondary btn-eliminar" onClick={onEliminar}>
+          🗑️ Eliminar este pedido
         </button>
       )}
 
-      {totalAbonado > 0 && (
-        <details onToggle={(e) => setVerHistorial(e.currentTarget.open)}>
-          <summary>Historial de abonos</summary>
-          <ul>
-            {abonos.map((a) => (
-              <li key={a.id}>
-                ${a.monto} — {a.fechaLocal} {a.horaLocal || ""} — {a.quienRecibio}
-              </li>
-            ))}
-          </ul>
-        </details>
+      {confirmarEntrega && (
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Confirmar entrega">
+          <div className="modal modal-aviso">
+            {confirmarEntrega === "entregar" ? (
+              <>
+                <h2>¿Confirmas la entrega?</h2>
+                <p>
+                  Le entregas <strong>{pedido.articulo}</strong> a <strong>{elemento.nombre}</strong>.
+                </p>
+                {!liquidado && (
+                  <p className="nota nota-alerta">
+                    Todavía debe {formatoMoneda(pedido.saldoPendiente)} de esta pieza.
+                  </p>
+                )}
+                {recibidas < piezas && (
+                  <p className="nota nota-alerta">
+                    No hay suficiente en Uniformidad disponible (hay {recibidas}, se necesitan {piezas}).
+                    Se registra la entrega igual, sin descontar nada.
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <h2>¿Deshacer la entrega?</h2>
+                <p>
+                  <strong>{pedido.articulo}</strong> volverá a quedar sin entregar
+                  {pedido.descontoInventario ? " y regresará a Uniformidad disponible" : ""}.
+                </p>
+              </>
+            )}
+            <div className="modal-acciones">
+              <button type="button" className="btn-secondary" onClick={() => setConfirmarEntrega(null)} disabled={guardando}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => ejecutarEntrega(confirmarEntrega === "entregar")}
+                disabled={guardando}
+              >
+                {guardando ? "Guardando…" : confirmarEntrega === "entregar" ? "Sí, entregar" : "Sí, deshacer"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+
+      {resolviendo && (
+        <ResolverCambio
+          elemento={elemento}
+          pedido={pedido}
+          onCerrar={() => setResolviendo(false)}
+          onResuelto={({ anterior, nueva, entregada }) => {
+            setResolviendo(false);
+            mostrarAviso({
+      elemento,
+              titulo: "Cambio resuelto",
+              mensaje: mensajeCambioResuelto({
+                nombre: elemento.nombre,
+                anterior,
+                nueva,
+                entregada,
+                quienEntrego: quien,
+              }),
+            });
+          }}
+        />
+      )}
+
     </div>
   );
 }

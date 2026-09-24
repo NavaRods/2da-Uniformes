@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { listenAbonosDelDia } from "../lib/pedidos";
 import { listenCuotasDelDia } from "../lib/cuotas";
 import { guardarNumeroWhatsapp } from "../lib/configuracion";
 import { useConfiguracion } from "../lib/fuentes";
+import { useAuth } from "../auth/AuthContext";
+import { listenRelacion, relacionDesactualizada, validarRelacionDia } from "../lib/relaciones";
 import {
   linkWhatsapp,
   mensajeRelacionDia,
@@ -23,21 +24,21 @@ import {
   resumenDia,
 } from "../lib/relacionPagos";
 
-const FILTROS = [
-  ["todos", "Todos"],
-  ["uniforme", "Uniformes"],
-  ["mensualidad", "Mensualidades"],
-];
-
-// Relación de pagos de un día: abonos de uniformes y mensualidades cobradas,
-// con su resumen y el envío por WhatsApp. `unidad` undefined = todas.
-export default function RelacionDelDia({ unidad, puedeConfigurarWhatsapp }) {
+// Relación de pagos del día: lo cobrado ese día, en general (uniformes por
+// pieza y talla; mensualidades con el nombre y los meses), sin el detalle de
+// cada cobro. Desde aquí se valida la entrega del dinero al proveedor (queda
+// guardada en la Relación General) y se envía el resumen por WhatsApp.
+// `unidad` undefined = todas (no se puede validar: la relación es por Unidad).
+export default function RelacionDelDia({ unidad, puedeConfigurarWhatsapp, puedeValidar }) {
+  const { user } = useAuth();
   const [fecha, setFecha] = useState(fechaLocalISO());
   const [abonos, setAbonos] = useState([]);
   const [cuotas, setCuotas] = useState([]);
   const [filas, setFilas] = useState([]);
-  const [subVista, setSubVista] = useState("detalle"); // detalle | general
-  const [filtro, setFiltro] = useState("todos");
+  const [relacion, setRelacion] = useState(null); // la relación validada de este día
+  const [confirmando, setConfirmando] = useState(false);
+  const [validando, setValidando] = useState(false);
+  const [errorValidar, setErrorValidar] = useState("");
   const [cargado, setCargado] = useState({ abonos: false, cuotas: false });
   const [error, setError] = useState("");
   const config = useConfiguracion();
@@ -148,8 +149,16 @@ export default function RelacionDelDia({ unidad, puedeConfigurarWhatsapp }) {
     };
   }, [abonos, cuotas]);
 
+  // La relación ya validada de este día (solo si se ve una Unidad).
+  useEffect(() => {
+    setRelacion(null);
+    setConfirmando(false);
+    setErrorValidar("");
+    if (!unidad) return undefined;
+    return listenRelacion(unidad, fecha, setRelacion);
+  }, [unidad, fecha]);
+
   const resumen = resumenDia(filas);
-  const visibles = filas.filter((f) => filtro === "todos" || f.tipo === filtro);
   const esHoy = fecha === hoy;
   const numeroConfigurado = config?.whatsappNumero;
   const hayNumero = telefonoValido(numeroConfigurado);
@@ -191,6 +200,25 @@ export default function RelacionDelDia({ unidad, puedeConfigurarWhatsapp }) {
     window.open(linkWhatsapp(numeroConfigurado, mensaje), "_blank");
   }
   const cargando = !error && !(cargado.abonos && cargado.cuotas);
+  const desactualizada = relacionDesactualizada(relacion, resumen);
+
+  async function validar() {
+    setValidando(true);
+    setErrorValidar("");
+    try {
+      await validarRelacionDia({
+        unidad,
+        fecha,
+        resumen,
+        quien: user?.displayName || user?.email,
+        previa: relacion,
+      });
+      setConfirmando(false);
+    } catch (e) {
+      setErrorValidar(e.message || "No se pudo validar. Verifica tu conexión e inténtalo de nuevo.");
+    }
+    setValidando(false);
+  }
 
   return (
     <>
@@ -224,13 +252,23 @@ export default function RelacionDelDia({ unidad, puedeConfigurarWhatsapp }) {
       </div>
 
       <div className="acciones-whatsapp">
+        {puedeValidar && unidad && (!relacion || desactualizada) && (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setConfirmando(true)}
+            disabled={cargando || !!error || resumen.movimientos === 0}
+          >
+            {relacion ? "🔄 Actualizar la relación validada" : "✅ Validar entrega del dinero"}
+          </button>
+        )}
         <button
           type="button"
-          className="btn-primary"
+          className={puedeValidar && unidad && (!relacion || desactualizada) ? "btn-secondary" : "btn-primary"}
           onClick={enviarPorWhatsapp}
           disabled={cargando || !!error}
         >
-          📲 Enviar relación del día por WhatsApp
+          📲 Enviar por WhatsApp
         </button>
         {puedeConfigurarWhatsapp && (
           <button
@@ -245,6 +283,36 @@ export default function RelacionDelDia({ unidad, puedeConfigurarWhatsapp }) {
           </button>
         )}
       </div>
+
+      {confirmando && (
+        <div className="card nota-alerta">
+          <p>
+            ¿Ya le entregaste <strong>{formatoMoneda(resumen.total)}</strong> al proveedor por lo cobrado
+            este día? Quedará guardado en la <strong>Relación General</strong>, donde marcarás las
+            piezas que te vaya entregando.
+          </p>
+          {errorValidar && <p className="error">{errorValidar}</p>}
+          <div className="acciones-fila">
+            <button type="button" className="btn-secondary" onClick={() => setConfirmando(false)}>
+              Todavía no
+            </button>
+            <button type="button" className="btn-primary" onClick={validar} disabled={validando}>
+              {validando ? "Guardando…" : "Sí, validar"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {relacion && (
+        <p className={desactualizada ? "nota" : "success-msg"}>
+          {desactualizada
+            ? `Se validó antes (${formatoMoneda(relacion.total)}), pero después hubo cambios en los pagos de este día. Actualiza la relación.`
+            : `✅ Dinero entregado al proveedor${relacion.entregadoPor ? ` (validó ${relacion.entregadoPor})` : ""}.`}
+        </p>
+      )}
+      {puedeValidar && !unidad && (
+        <p className="nota">Elige una Unidad para validar la entrega del dinero.</p>
+      )}
 
       {!hayNumero && config && !mostrarConfig && (
         <p className="nota">
@@ -314,104 +382,49 @@ export default function RelacionDelDia({ unidad, puedeConfigurarWhatsapp }) {
         </div>
       </div>
 
-      <div className="tabs" role="tablist">
-        {[
-          ["detalle", "Detalle"],
-          ["general", "General"],
-        ].map(([clave, etiqueta]) => (
-          <button
-            key={clave}
-            type="button"
-            role="tab"
-            aria-selected={subVista === clave}
-            className={`tab ${subVista === clave ? "activo" : ""}`}
-            onClick={() => setSubVista(clave)}
-          >
-            {etiqueta}
-          </button>
-        ))}
+      <div className="card">
+        <h2>Uniformes</h2>
+        {!cargando && !error && resumen.general.length === 0 && (
+          <p className="nota">No se cobraron uniformes este día.</p>
+        )}
+        <ul className="pagos">
+          {resumen.general.map((r) => (
+            <li key={r.pieza} className="pago">
+              <div className="pago-info">
+                <span>{r.pieza || "—"}</span>
+                <span className="nota">
+                  {r.cantidad} {r.cantidad === 1 ? "pieza" : "piezas"}
+                </span>
+              </div>
+              <div className="pago-monto">
+                <strong>{formatoMoneda(r.total)}</strong>
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
 
-      {subVista === "detalle" && (
-        <>
-          <div className="filtros">
-            {FILTROS.map(([clave, etiqueta]) => (
-              <button
-                key={clave}
-                type="button"
-                className={`chip ${filtro === clave ? "activo" : ""}`}
-                aria-pressed={filtro === clave}
-                onClick={() => setFiltro(clave)}
-              >
-                {etiqueta}
-              </button>
-            ))}
-          </div>
+      <div className="card">
+        <h2>Mensualidades</h2>
+        {!cargando && !error && resumen.mensualidades.length === 0 && (
+          <p className="nota">No se cobraron mensualidades este día.</p>
+        )}
+        <ul className="pagos">
+          {resumen.mensualidades.map((m) => (
+            <li key={m.nombre} className="pago">
+              <div className="pago-info">
+                <span>{m.nombre}</span>
+                <span className="nota">{m.meses.join(", ")}</span>
+              </div>
+              <div className="pago-monto">
+                <strong>{formatoMoneda(m.monto)}</strong>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
 
-          {!cargando && !error && visibles.length === 0 && (
-            <p className="nota">Sin pagos registrados este día.</p>
-          )}
-          <ul className="pagos">
-            {visibles.map((f) => (
-              <li key={f.id} className="pago">
-                <div className="pago-info">
-                  <Link to={`/elementos/${f.elementoId}`} className="pago-nombre">
-                    {f.elementoNombre}
-                  </Link>
-                  <span>{f.concepto}</span>
-                  <span className="nota">
-                    {f.horaLocal} · recibió {f.quienRecibio || "—"}
-                  </span>
-                </div>
-                <div className="pago-monto">
-                  <strong>{formatoMoneda(f.monto)}</strong>
-                  <span
-                    className={`insignia insignia-${
-                      f.tipo === "mensualidad" ? "cuota" : f.etiqueta === "Liquidado" ? "ok" : "abono"
-                    }`}
-                  >
-                    {f.etiqueta}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {subVista === "general" && (
-        <>
-          <p className="nota">Solo piezas, tallas y montos — sin datos de elementos.</p>
-          {!cargando && !error && resumen.general.length === 0 && resumen.mesesCobrados === 0 && (
-            <p className="nota">Sin movimientos este día.</p>
-          )}
-          <ul className="pagos">
-            {resumen.general.map((r) => (
-              <li key={r.pieza} className="pago">
-                <div className="pago-info">
-                  <span>
-                    {r.cantidad} × {r.pieza || "—"}
-                  </span>
-                </div>
-                <div className="pago-monto">
-                  <strong>{formatoMoneda(r.total)}</strong>
-                </div>
-              </li>
-            ))}
-            {resumen.mesesCobrados > 0 && (
-              <li className="pago">
-                <div className="pago-info">
-                  <span>{resumen.mesesCobrados} × Mensualidad</span>
-                </div>
-                <div className="pago-monto">
-                  <strong>{formatoMoneda(resumen.totalMensualidades)}</strong>
-                </div>
-              </li>
-            )}
-          </ul>
-          <p className="total-general">Total general del día = {formatoMoneda(resumen.total)}</p>
-        </>
-      )}
+      <p className="total-general">Total general del día = {formatoMoneda(resumen.total)}</p>
     </>
   );
 }

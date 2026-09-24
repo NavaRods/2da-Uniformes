@@ -7,6 +7,7 @@ import {
   TALLA_TIPO,
 } from "../lib/catalogo";
 import { useCatalogo } from "../lib/fuentes";
+import BotonVolver from "../components/BotonVolver";
 import { useAuth } from "../auth/AuthContext";
 import { esAdmin as puedeAdministrar } from "../lib/roles";
 
@@ -194,6 +195,7 @@ export default function Catalogo() {
 
   return (
     <div className="page">
+      <BotonVolver porDefecto="/configuracion" etiquetaPorDefecto="Configuración" />
       <h1>Catálogo</h1>
 
       {!esAdmin && <p className="nota">Solo un Admin puede editar el catálogo.</p>}

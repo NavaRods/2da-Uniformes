@@ -14,6 +14,7 @@ import Uniformidad from "./pages/Uniformidad";
 import Usuarios from "./pages/Usuarios";
 import Configuracion from "./pages/Configuracion";
 import EstadoConexion from "./components/EstadoConexion";
+import { AvisoProvider } from "./components/AvisoProvider";
 import { esAdmin, requiereUnidad } from "./lib/roles";
 import "./App.css";
 
@@ -175,7 +176,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppRoutes />
+        <AvisoProvider>
+          <AppRoutes />
+        </AvisoProvider>
       </AuthProvider>
     </ThemeProvider>
   );

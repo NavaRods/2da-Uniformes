@@ -3,15 +3,15 @@ import { useAuth } from "../auth/AuthContext";
 import { esAdmin } from "../lib/roles";
 
 const SECCIONES = [
-  ["/elementos", "👥", "Elementos", "Perfiles, datos y documentación"],
-  ["/asistencia", "✅", "Asistencia", "Pasar lista de cada sesión"],
-  ["/reporte-asistencia", "📊", "Reportes", "Resumen de asistencia"],
-  ["/pagos", "💵", "Relación de pagos", "Mensualidades e inscripciones"],
-  ["/uniformidad", "👕", "Uniformidad", "Pedidos, abonos y entregas"],
+  ["/elementos", "👥", "Elementos", "Ver y registrar a las personas, y abrir su perfil"],
+  ["/asistencia", "✅", "Asistencia", "Pasar lista y sacar el Estado de Fuerza"],
+  ["/reporte-asistencia", "📊", "Reportes", "Lista de asistencia del mes en PDF"],
+  ["/pagos", "💵", "Relación de pagos", "Cobros del día, entrega al proveedor y piezas por recibir"],
+  ["/uniformidad", "👕", "Uniformes y Mensualidades", "Vender uniformes, cobrar mensualidades, entregas y cambios"],
 ];
 
 const SECCIONES_ADMIN = [
-  ["/usuarios", "🛡️", "Usuarios", "Cuentas y roles"],
+  ["/usuarios", "🛡️", "Usuarios", "Dar de alta al personal y sus roles"],
   ["/configuracion", "⚙️", "Configuración", "Unidades, grados y catálogo"],
 ];
 

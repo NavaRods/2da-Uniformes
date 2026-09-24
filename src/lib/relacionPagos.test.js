@@ -226,7 +226,7 @@ describe("uniformidad por entregar", () => {
     });
   });
 
-  it("cruza lo que se debe con Uniforme recibido (sin pasar de lo que se debe)", () => {
+  it("cruza lo que se debe con Uniformidad disponible (sin pasar de lo que se debe)", () => {
     const existencias = new Map([
       [claveVariante({ productoNombre: "Gorra", talla: "5" }), 1],
       [claveVariante({ productoNombre: "Gorra", talla: "10" }), 7],
@@ -320,5 +320,33 @@ describe("identificador de cada fila", () => {
     const c2 = filaDeCuota({ id: "c1", elementoId: "e2", meses: ["2026-09"], total: 60 }, "Luis");
     expect(a1.id).not.toBe(a2.id);
     expect(c1.id).not.toBe(c2.id);
+  });
+});
+
+describe("cambio pendiente", () => {
+  const conCambio = filaDePedido({
+    id: "1", elementoId: "e", productoNombre: "Playera", articulo: "Playera — Blanca — talla M",
+    talla: "M", color: "Blanca", precioTotal: 180, saldoPendiente: 0, entregado: true,
+    cambioPendiente: true, cambioTalla: "G", cambioColor: "Blanca",
+  });
+
+  it("la pieza nueva cuenta como pendiente aunque la anterior ya se entregó", () => {
+    expect(conCambio.faltaEntregar).toBe(true);
+    expect(conCambio.pendiente).toBe(true);
+    expect(conCambio.tallaEntrega).toBe("G");
+    // La fila conserva la talla original para mostrar el "de M a G".
+    expect(conCambio.talla).toBe("M");
+  });
+
+  it("en Pendientes se suma en la talla NUEVA y se marca como cambio", () => {
+    const [playera] = uniformidadPorEntregar([conCambio]);
+    expect(playera.variantes).toHaveLength(1);
+    expect(playera.variantes[0]).toMatchObject({ talla: "G", piezas: 1, cambios: 1 });
+  });
+
+  it("sin cambio pendiente la talla de entrega es la del pedido", () => {
+    const f = filaDePedido({ id: "2", elementoId: "e", productoNombre: "Gorra", talla: "5", precioTotal: 1, saldoPendiente: 0 });
+    expect(f.tallaEntrega).toBe("5");
+    expect(f.cambioPendiente).toBe(false);
   });
 });

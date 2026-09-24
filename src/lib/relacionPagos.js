@@ -142,6 +142,11 @@ export function filaDePedido(pedido) {
   // Si el saldo se pasó de 0 (pago de más), lo abonado no supera el precio.
   const pagado = liquidado ? precio : Math.max(precio - saldoCrudo, 0);
   const entregado = !!pedido.entregado;
+  // Con un cambio pendiente, lo que falta por recibir y entregar es la pieza
+  // NUEVA (la talla/color pedidos), aunque la anterior ya se hubiera entregado.
+  const cambio = !!pedido.cambioPendiente;
+  const tallaEntrega = cambio ? pedido.cambioTalla ?? pedido.talla ?? "" : pedido.talla || "";
+  const colorEntrega = cambio ? pedido.cambioColor ?? pedido.color ?? "" : pedido.color || "";
   return {
     id: `${pedido.elementoId}/${pedido.id}`,
     elementoId: pedido.elementoId,
@@ -159,18 +164,21 @@ export function filaDePedido(pedido) {
     entregado,
     fechaEntrega: pedido.fechaEntrega || null,
     quienEntrego: pedido.quienEntrego || "",
-    cambioPendiente: !!pedido.cambioPendiente,
+    cambioPendiente: cambio,
     motivoCambio: pedido.motivoCambio || "",
+    // Talla/color de la pieza que se entrega (la nueva si hay un cambio).
+    tallaEntrega,
+    colorEntrega,
     creadoMs: milis(pedido.creadoEn),
     debeDinero: !liquidado,
-    faltaEntregar: !entregado,
-    pendiente: !liquidado || !entregado,
+    faltaEntregar: !entregado || cambio,
+    pendiente: !liquidado || !entregado || cambio,
     unidad: pedido.unidad || "",
   };
 }
 
 // Identifica una variante (producto, talla y color): enlaza lo que se debe con
-// lo que hay en "Uniforme recibido" (lib/inventario.js).
+// lo que hay en "Uniformidad disponible" (lib/inventario.js).
 export const claveVariante = ({ productoNombre, talla, color }) =>
   `${productoNombre || ""}|${talla || ""}|${color || ""}`;
 
@@ -186,7 +194,7 @@ const porTalla = (a, b) =>
   (a.color || "").localeCompare(b.color || "", "es");
 
 //
-// Con `existencias` (Map claveVariante → piezas en "Uniforme recibido", ver
+// Con `existencias` (Map claveVariante → piezas en "Uniformidad disponible", ver
 // lib/inventario.js) cada variante dice cuántas ya se recibieron
 // (`recibido`, hasta lo que se debe) y cuántas faltan por recibir.
 export function uniformidadPorEntregar(filas, existencias = new Map()) {
@@ -198,13 +206,16 @@ export function uniformidadPorEntregar(filas, existencias = new Map()) {
       productos.set(nombre, { producto: nombre, piezas: 0, pagadas: 0, conSaldo: 0, variantes: new Map() });
     }
     const prod = productos.get(nombre);
-    const clave = `${f.talla}|${f.color}`;
+    const talla = f.tallaEntrega ?? f.talla;
+    const color = f.colorEntrega ?? f.color;
+    const clave = `${talla}|${color}`;
     if (!prod.variantes.has(clave)) {
-      prod.variantes.set(clave, { talla: f.talla, color: f.color, piezas: 0, pagadas: 0, conSaldo: 0 });
+      prod.variantes.set(clave, { talla, color, piezas: 0, pagadas: 0, conSaldo: 0, cambios: 0 });
     }
     const variante = prod.variantes.get(clave);
     for (const grupo of [prod, variante]) {
       grupo.piezas += f.cantidad;
+      if (f.cambioPendiente) grupo.cambios = (grupo.cambios || 0) + f.cantidad;
       if (f.liquidado) grupo.pagadas += f.cantidad;
       else grupo.conSaldo += f.cantidad;
     }

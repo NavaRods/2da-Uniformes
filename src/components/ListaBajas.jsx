@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { reactivarElemento } from "../lib/asistencia";
+import { useDesde } from "../lib/navegacion";
 
 // Elementos dados de baja. No se pueden eliminar: solo reactivar (salvo con
 // `soloLectura`, para el rol Estado Mayor). Se usa en Elementos y en Asistencia.
 export default function ListaBajas({ bajas, soloLectura = false }) {
   const [error, setError] = useState("");
+  const desde = useDesde();
 
   async function onReactivar(el) {
     if (!confirm(`¿Reactivar a ${el.nombre}? Volverá a aparecer en las listas.`)) return;
@@ -25,7 +27,7 @@ export default function ListaBajas({ bajas, soloLectura = false }) {
       <ul className="lista">
         {bajas.map((el) => (
           <li key={el.id} className="fila-baja">
-            <Link to={`/elementos/${el.id}`} className="fila-lista">
+            <Link to={`/elementos/${el.id}`} state={desde} className="fila-lista">
               <span>
                 {el.nombre}
                 <span className="nota"> · {[el.gradoMilitar, el.unidad].filter(Boolean).join(" · ")}</span>

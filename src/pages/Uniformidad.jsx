@@ -3,41 +3,66 @@ import { Link } from "react-router-dom";
 import {
   useElementos,
   useElementosDeUnidades,
+  useInventarioDeUnidades,
   usePedidosDeUnidades,
   useUnidades,
   useCatalogo,
 } from "../lib/fuentes";
 import { requiereTalla, TALLA_TIPO } from "../lib/catalogo";
 import { filaDePedido, relacionPorElemento } from "../lib/relacionPagos";
-import BuscadorElemento from "../components/BuscadorElemento";
+import { formatoMoneda } from "../lib/format";
+import ListaElementosBuscable from "../components/ListaElementosBuscable";
 import SelectorBuscable from "../components/SelectorBuscable";
 import RelacionPorElemento from "../components/RelacionPorElemento";
 import CambiosPendientes from "../components/CambiosPendientes";
+import CobrarMensualidad from "../components/CobrarMensualidad";
+import UniformeRecibido from "../components/UniformeRecibido";
+import { useAviso } from "../components/AvisoProvider";
 import { crearPedido, registrarAbono } from "../lib/pedidos";
-import { linkWhatsapp } from "../lib/whatsapp";
 import { useAuth } from "../auth/AuthContext";
 import { esAdmin, veTodasLasUnidades, esSoloLectura } from "../lib/roles";
+import { useDesde, useEstadoPersistente } from "../lib/navegacion";
 
 const SIN_UNIDADES = [];
 
-// Uniformidad:
-//  - Venta: registrar una compra nueva a un elemento (producto, talla, pago).
+// Explica en una línea qué se hace en cada pestaña.
+const AYUDA = {
+  venta: "Registra lo que un elemento compra hoy: elige a la persona, agrega sus piezas y cobra.",
+  mensualidad: "Cobra las mensualidades de un elemento: elige a la persona y marca los meses que paga.",
+  disponible:
+    "Los uniformes que ya te entregó el proveedor y tienes para entregar. Cada pieza que entregas a un elemento se descuenta de aquí.",
+  elementos:
+    "Cada elemento con sus uniformes: cuánto ha pagado, si ya se entregó y quién aún debe. Toca uno para ver sus piezas.",
+  cambios:
+    "Piezas que se van a cambiar por otra talla o color. Aquí se resuelven; la pieza nueva también aparece como pendiente en Relación de pagos.",
+};
+
+// Uniformes y Mensualidades:
+//  - Nueva venta: registrar una compra a un elemento (producto, talla, pago).
 //    Necesita elegir una sola Unidad (no aplica "Todas").
 //  - Por elemento: cada elemento con sus uniformes, lo pagado y si ya se
 //    entregó. Toca un elemento para ver sus pedidos y sus pagos.
+//  - Mensualidad: cobrar mensualidades a un elemento.
 //  - Cambios: piezas con un cambio por resolver.
+//  - Disponible: "Uniformidad disponible", lo que el proveedor ya entregó
+//    (se marca en la Relación de pagos) y se descuenta al entregar.
 // Por elemento y Cambios aceptan "Todas las Unidades" (Admin/Super
 // Admin/Estado Mayor); Responsable e Instructor solo tienen la suya.
 export default function Uniformidad() {
   const { user, perfil } = useAuth();
   const puedeElegirUnidad = veTodasLasUnidades(perfil);
   const soloLectura = esSoloLectura(perfil);
+  const desde = useDesde();
+  // Lo elegido se recuerda al volver de un perfil (por usuario).
+  const [unidadElegida, setUnidad] = useEstadoPersistente(`${user?.email}:uniformidad:unidad`, "");
   // Responsable/Instructor traen su Unidad precargada y fija; el resto elige.
-  const [unidad, setUnidad] = useState(puedeElegirUnidad ? "" : perfil?.unidad || "");
-  const [vista, setVista] = useState(soloLectura ? "elementos" : "venta");
+  const unidad = puedeElegirUnidad ? unidadElegida : perfil?.unidad || "";
+  const [vistaGuardada, setVista] = useEstadoPersistente(`${user?.email}:uniformidad:vista`, "venta");
+  const vista =
+    soloLectura && (vistaGuardada === "venta" || vistaGuardada === "mensualidad") ? "elementos" : vistaGuardada;
 
   const [elementoSeleccionado, setElementoSeleccionado] = useState(null);
-  const [elementoParaConfirmar, setElementoParaConfirmar] = useState(null);
+  const [elementoMensualidad, setElementoMensualidad] = useState(null);
 
   const [productoId, setProductoId] = useState("");
   const [talla, setTalla] = useState("");
@@ -48,6 +73,8 @@ export default function Uniformidad() {
   const [carrito, setCarrito] = useState([]);
   const [cerrando, setCerrando] = useState(false);
   const [ventaCerrada, setVentaCerrada] = useState(false);
+  const [errorVenta, setErrorVenta] = useState("");
+  const mostrarAviso = useAviso();
 
   const unidades = useUnidades(puedeElegirUnidad);
   // Venta necesita una sola Unidad para cargar sus elementos (no se leen
@@ -57,17 +84,20 @@ export default function Uniformidad() {
   const elementosVenta = useElementos(unidad);
   const catalogo = useCatalogo();
 
-  const unidadesDeUniformidad = useMemo(() => {
-    if (vista === "venta") return SIN_UNIDADES;
+  const unidadesVisibles = useMemo(() => {
     if (unidad) return [unidad];
     if (puedeElegirUnidad) return unidades.map((u) => u.nombre);
     return perfil?.unidad ? [perfil.unidad] : SIN_UNIDADES;
-  }, [vista, unidad, puedeElegirUnidad, unidades, perfil?.unidad]);
+  }, [unidad, puedeElegirUnidad, unidades, perfil?.unidad]);
+  // Cada pestaña carga solo lo que necesita.
+  const necesitaPedidos = vista === "elementos" || vista === "cambios";
+  const unidadesDeUniformidad = necesitaPedidos ? unidadesVisibles : SIN_UNIDADES;
+  const inventario = useInventarioDeUnidades(vista === "disponible" ? unidadesVisibles : SIN_UNIDADES);
 
   const elementos = useElementosDeUnidades(unidadesDeUniformidad);
   const pedidos = usePedidosDeUnidades(unidadesDeUniformidad);
   const cargandoUniformidad =
-    vista !== "venta" &&
+    necesitaPedidos &&
     (elementos === null ||
       pedidos === null ||
       (puedeElegirUnidad && !unidad && unidades.length === 0));
@@ -108,19 +138,10 @@ export default function Uniformidad() {
   }
 
   function elegirElemento(id) {
-    const el = elementosVenta.find((e) => e.id === id);
-    setElementoParaConfirmar(el || null);
-  }
-
-  function confirmarElemento() {
-    setElementoSeleccionado(elementoParaConfirmar);
-    setElementoParaConfirmar(null);
+    setElementoSeleccionado(elementosVenta.find((e) => e.id === id) || null);
     setCarrito([]);
     setVentaCerrada(false);
-  }
-
-  function cancelarConfirmacion() {
-    setElementoParaConfirmar(null);
+    setErrorVenta("");
   }
 
   function agregarAlCarrito() {
@@ -159,45 +180,54 @@ export default function Uniformidad() {
   async function cerrarVenta() {
     if (carrito.length === 0 || !elementoSeleccionado) return;
     setCerrando(true);
+    setErrorVenta("");
 
-    for (const item of carrito) {
-      const pedidoRef = await crearPedido(elementoSeleccionado.id, {
-        articulo: item.articulo,
-        precioTotal: item.precioTotal,
-        productoNombre: item.productoNombre,
-        talla: item.talla,
-        color: item.color,
-        cantidad: 1,
-        unidad: elementoSeleccionado.unidad,
-      });
-      await registrarAbono(elementoSeleccionado.id, pedidoRef.id, {
-        monto: item.monto,
-        quienRecibio: user?.displayName || user?.email,
-        unidad: elementoSeleccionado.unidad,
-        elementoNombre: elementoSeleccionado.nombre,
-        pedido: {
+    try {
+      for (const item of carrito) {
+        const pedidoRef = await crearPedido(elementoSeleccionado.id, {
           articulo: item.articulo,
+          precioTotal: item.precioTotal,
           productoNombre: item.productoNombre,
           talla: item.talla,
           color: item.color,
-          saldoPendiente: item.precioTotal,
-        },
-      });
+          cantidad: 1,
+          unidad: elementoSeleccionado.unidad,
+        });
+        await registrarAbono(elementoSeleccionado.id, pedidoRef.id, {
+          monto: item.monto,
+          quienRecibio: user?.displayName || user?.email,
+          unidad: elementoSeleccionado.unidad,
+          elementoNombre: elementoSeleccionado.nombre,
+          pedido: {
+            articulo: item.articulo,
+            productoNombre: item.productoNombre,
+            talla: item.talla,
+            color: item.color,
+            saldoPendiente: item.precioTotal,
+          },
+        });
+      }
+    } catch {
+      setErrorVenta("No se pudo registrar la venta completa. Revisa tu conexión y vuelve a intentarlo.");
+      setCerrando(false);
+      return;
     }
 
     const lineas = carrito.map(
       (i) =>
-        `• ${i.articulo} — $${i.monto} (${
+        `• ${i.articulo} — ${formatoMoneda(i.monto)} (${
           i.tipoPago === "liquidacion" ? "Liquidado" : "Abono"
         })`
     );
     const total = carrito.reduce((s, i) => s + i.monto, 0);
-    const mensaje = `Hola ${elementoSeleccionado.nombre}, se registró tu compra:\n${lineas.join(
-      "\n"
-    )}\nTotal pagado hoy: $${total}`;
-
-    const telefono = elementoSeleccionado.telefonos?.[0];
-    if (telefono) window.open(linkWhatsapp(telefono, mensaje), "_blank");
+    // El aviso por WhatsApp es un paso aparte: se ofrece, no se manda solo.
+    mostrarAviso({
+      elemento: elementoSeleccionado,
+      titulo: "Venta registrada",
+      mensaje: `Hola ${elementoSeleccionado.nombre}, se registró tu compra:\n${lineas.join(
+        "\n"
+      )}\nTotal pagado hoy: ${formatoMoneda(total)}`,
+    });
 
     setCarrito([]);
     setCerrando(false);
@@ -205,16 +235,19 @@ export default function Uniformidad() {
   }
 
   const totalCarrito = carrito.reduce((s, i) => s + i.monto, 0);
+  const paso = !elementoSeleccionado ? 1 : carrito.length === 0 ? 2 : 3;
 
   const tabs = [
-    !soloLectura && ["venta", "Venta"],
+    !soloLectura && ["venta", "Nueva venta"],
+    !soloLectura && ["mensualidad", "Mensualidad"],
     ["elementos", "Por elemento"],
     ["cambios", `Cambios${cuenta(datosUniformidad?.cambios.length)}`],
+    ["disponible", "Disponible"],
   ].filter(Boolean);
 
   return (
     <div className="page">
-      <h1>Uniformidad</h1>
+      <h1>Uniformes y Mensualidades</h1>
 
       {puedeElegirUnidad && (
         <div className="campo">
@@ -222,10 +255,15 @@ export default function Uniformidad() {
           <select
             id="unidad-uniformidad"
             value={unidad}
-            onChange={(e) => setUnidad(e.target.value)}
+            onChange={(e) => {
+              setUnidad(e.target.value);
+              setElementoSeleccionado(null);
+              setElementoMensualidad(null);
+              setCarrito([]);
+            }}
           >
             <option value="">
-              {vista === "venta" ? "Selecciona una Unidad..." : "Todas las Unidades"}
+              {vista === "venta" || vista === "mensualidad" ? "Selecciona una Unidad..." : "Todas las Unidades"}
             </option>
             {unidades.map((u) => (
               <option key={u.id} value={u.nombre}>
@@ -251,128 +289,159 @@ export default function Uniformidad() {
         ))}
       </div>
 
+      <p className="ayuda">{AYUDA[vista]}</p>
+
       {vista === "venta" && !soloLectura && (
         <>
+          <ol className="pasos" aria-label="Pasos de la venta">
+            {["Elemento", "Artículos", "Cobrar"].map((nombre, i) => (
+              <li key={nombre} className={paso === i + 1 ? "actual" : paso > i + 1 ? "hecho" : ""}>
+                <span className="paso-numero">{paso > i + 1 ? "✓" : i + 1}</span>
+                {nombre}
+              </li>
+            ))}
+          </ol>
+
           {!elementoSeleccionado && (
             <div className="card">
-              <h2>Selecciona un elemento</h2>
-              {!unidad && <p className="nota">Elige una Unidad arriba.</p>}
-              <BuscadorElemento elementos={elementosVenta} onSeleccionar={elegirElemento} />
-            </div>
-          )}
-
-          {elementoParaConfirmar && (
-            <div className="modal-overlay">
-              <div className="modal">
-                <h2>¿Confirmas que es el elemento correcto?</h2>
-                <p>
-                  <strong>{elementoParaConfirmar.nombre}</strong>
-                  {elementoParaConfirmar.unidad ? ` — ${elementoParaConfirmar.unidad}` : ""}
-                  {elementoParaConfirmar.grupo ? ` (${elementoParaConfirmar.grupo})` : ""}
-                </p>
-                <div className="modal-acciones">
-                  <button className="btn-secondary" onClick={cancelarConfirmacion}>
-                    Cancelar
-                  </button>
-                  <button className="btn-primary" onClick={confirmarElemento}>
-                    Sí, es correcto
-                  </button>
-                </div>
-              </div>
+              <h2>¿A quién le vendes?</h2>
+              {!unidad ? (
+                <p className="nota">Primero elige una Unidad arriba.</p>
+              ) : (
+                <ListaElementosBuscable
+                  elementos={elementosVenta}
+                  onSeleccionar={elegirElemento}
+                  vacio="Esta Unidad todavía no tiene elementos."
+                />
+              )}
             </div>
           )}
 
           {elementoSeleccionado && (
             <>
               <div className="venta-elemento">
-                <strong>{elementoSeleccionado.nombre}</strong>
+                <span>
+                  <span className="nota">Venta para</span>
+                  <strong>{elementoSeleccionado.nombre}</strong>
+                </span>
                 <button
+                  type="button"
                   className="btn-secondary btn-small"
                   onClick={() => {
                     setElementoSeleccionado(null);
                     setCarrito([]);
+                    setVentaCerrada(false);
                   }}
                 >
-                  Cambiar elemento
+                  Cambiar
                 </button>
               </div>
 
               {ventaCerrada && (
-                <p className="success-msg">✅ Venta cerrada y registrada.</p>
+                <div className="success-msg">
+                  ✅ Venta registrada.{" "}
+                  <Link
+                    to={`/elementos/${elementoSeleccionado.id}`}
+                    state={{ unidad: elementoSeleccionado.unidad, ...desde }}
+                  >
+                    Ver perfil de {elementoSeleccionado.nombre}
+                  </Link>
+                </div>
               )}
 
               <div className="card">
-                <h2>Agregar artículo</h2>
+                <h2>Agrega una pieza</h2>
                 <SelectorBuscable
                   items={catalogo}
                   valorId={productoId}
-                  obtenerTexto={(p) => `${p.nombre} — $${p.precio}`}
+                  obtenerTexto={(p) => `${p.nombre} — ${formatoMoneda(p.precio)}`}
                   onSeleccionar={onSeleccionarProducto}
-                  placeholder="Selecciona un producto..."
-                  placeholderBusqueda="Buscar por nombre..."
+                  placeholder="Elige el producto…"
+                  placeholderBusqueda="Buscar producto…"
                 />
 
                 {producto?.colores?.length > 0 && (
-                  <select value={color} onChange={(e) => setColor(e.target.value)}>
-                    {producto.colores.map((c) => (
-                      <option key={c}>{c}</option>
-                    ))}
-                  </select>
+                  <div className="campo">
+                    <label htmlFor="venta-color">Color</label>
+                    <select id="venta-color" value={color} onChange={(e) => setColor(e.target.value)}>
+                      {producto.colores.map((c) => (
+                        <option key={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
 
                 {producto?.tallaTipo === TALLA_TIPO.LISTA && (
-                  <select value={talla} onChange={(e) => setTalla(e.target.value)}>
-                    <option value="">Talla...</option>
-                    {producto.tallas.map((t) => (
-                      <option key={t}>{t}</option>
-                    ))}
-                  </select>
+                  <div className="campo">
+                    <label htmlFor="venta-talla">Talla</label>
+                    <select id="venta-talla" value={talla} onChange={(e) => setTalla(e.target.value)}>
+                      <option value="">Elige la talla…</option>
+                      {producto.tallas.map((t) => (
+                        <option key={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
 
                 {producto?.tallaTipo === TALLA_TIPO.LIBRE && (
-                  <input
-                    placeholder="Talla (a la medida)"
-                    value={talla}
-                    onChange={(e) => setTalla(e.target.value)}
-                  />
+                  <div className="campo">
+                    <label htmlFor="venta-talla-libre">Talla</label>
+                    <input
+                      id="venta-talla-libre"
+                      placeholder="Talla (a la medida)"
+                      value={talla}
+                      onChange={(e) => setTalla(e.target.value)}
+                    />
+                  </div>
                 )}
 
                 {producto && (
                   <>
-                    <div className="inline-form">
-                      <label className="checkbox">
-                        <input
-                          type="radio"
-                          name="tipoPago"
-                          checked={tipoPago === "liquidacion"}
-                          onChange={() => onCambiarTipoPago("liquidacion")}
-                        />
-                        Liquidación (${producto.precio})
-                      </label>
-                      <label className="checkbox">
-                        <input
-                          type="radio"
-                          name="tipoPago"
-                          checked={tipoPago === "abono"}
-                          onChange={() => onCambiarTipoPago("abono")}
-                        />
-                        Abono
-                      </label>
+                    <div className="campo">
+                      <span className="etiqueta-grupo">¿Cómo paga?</span>
+                      <div className="segmentos" role="group" aria-label="Forma de pago">
+                        <button
+                          type="button"
+                          className={tipoPago === "liquidacion" ? "activo" : ""}
+                          aria-pressed={tipoPago === "liquidacion"}
+                          onClick={() => onCambiarTipoPago("liquidacion")}
+                        >
+                          Paga completo
+                          <small>{formatoMoneda(producto.precio)}</small>
+                        </button>
+                        <button
+                          type="button"
+                          className={tipoPago === "abono" ? "activo" : ""}
+                          aria-pressed={tipoPago === "abono"}
+                          onClick={() => onCambiarTipoPago("abono")}
+                        >
+                          Deja un abono
+                          <small>paga una parte</small>
+                        </button>
+                      </div>
                     </div>
 
                     {tipoPago === "abono" && (
-                      <input
-                        placeholder="Monto del abono"
-                        type="number"
-                        value={monto}
-                        onChange={(e) => setMonto(e.target.value)}
-                      />
+                      <div className="campo">
+                        <label htmlFor="venta-abono">¿Cuánto abona?</label>
+                        <input
+                          id="venta-abono"
+                          placeholder="Monto ($)"
+                          type="number"
+                          inputMode="decimal"
+                          min="1"
+                          max={producto.precio}
+                          value={monto}
+                          onChange={(e) => setMonto(e.target.value)}
+                        />
+                      </div>
                     )}
 
                     <button
+                      type="button"
                       className="btn-primary"
                       onClick={agregarAlCarrito}
-                      disabled={faltaTalla}
+                      disabled={faltaTalla || !(Number(monto) > 0)}
                     >
                       + Agregar a la venta
                     </button>
@@ -383,43 +452,98 @@ export default function Uniformidad() {
               {carrito.length > 0 && (
                 <div className="card">
                   <h2>Venta en curso</h2>
-                  {carrito.map((item) => (
-                    <div className="carrito-item" key={item.key}>
-                      <span>
-                        {item.articulo} — ${item.monto} (
-                        {item.tipoPago === "liquidacion" ? "Liquidado" : "Abono"})
-                      </span>
-                      <button
-                        className="btn-secondary"
-                        onClick={() => quitarDelCarrito(item.key)}
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  ))}
+                  <ul className="carrito">
+                    {carrito.map((item) => (
+                      <li className="carrito-item" key={item.key}>
+                        <span>
+                          {item.articulo}
+                          <span className="nota">
+                            {formatoMoneda(item.monto)} ·{" "}
+                            {item.tipoPago === "liquidacion" ? "paga completo" : "abono"}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-secondary btn-small"
+                          onClick={() => quitarDelCarrito(item.key)}
+                        >
+                          Quitar
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                   <div className="carrito-total">
-                    <span>Total</span>
-                    <span>${totalCarrito}</span>
+                    <span>Total a cobrar hoy</span>
+                    <span>{formatoMoneda(totalCarrito)}</span>
                   </div>
-                  <button
-                    className="btn-primary"
-                    onClick={cerrarVenta}
-                    disabled={cerrando}
-                  >
-                    {cerrando ? "Cerrando venta..." : "Cerrar venta"}
+                  {errorVenta && <p className="error">{errorVenta}</p>}
+                  <button type="button" className="btn-primary" onClick={cerrarVenta} disabled={cerrando}>
+                    {cerrando ? "Registrando…" : "Cobrar y registrar venta"}
                   </button>
                 </div>
               )}
             </>
           )}
 
-          <p style={{ marginTop: 24 }}>
-            {esAdmin(perfil) && (
-              <Link to="/catalogo" className="volver">
+          {esAdmin(perfil) && (
+            <p className="enlace-secundario">
+              <Link to="/catalogo" state={desde}>
                 Administrar catálogo de productos →
               </Link>
-            )}
-          </p>
+            </p>
+          )}
+        </>
+      )}
+
+      {vista === "mensualidad" && !soloLectura && (
+        <>
+          {!elementoMensualidad && (
+            <div className="card">
+              <h2>¿Quién paga mensualidad?</h2>
+              {!unidad ? (
+                <p className="nota">Primero elige una Unidad arriba.</p>
+              ) : (
+                <ListaElementosBuscable
+                  elementos={elementosVenta}
+                  onSeleccionar={(id) =>
+                    setElementoMensualidad(elementosVenta.find((e) => e.id === id) || null)
+                  }
+                  vacio="Esta Unidad todavía no tiene elementos."
+                />
+              )}
+            </div>
+          )}
+          {elementoMensualidad && (
+            <>
+              <div className="venta-elemento">
+                <span>
+                  <span className="nota">Mensualidad de</span>
+                  <strong>{elementoMensualidad.nombre}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary btn-small"
+                  onClick={() => setElementoMensualidad(null)}
+                >
+                  Cambiar
+                </button>
+              </div>
+              <CobrarMensualidad elemento={elementoMensualidad} />
+            </>
+          )}
+        </>
+      )}
+
+      {vista === "disponible" && (
+        <>
+          {inventario === null && <p className="nota">Cargando…</p>}
+          {inventario && (
+            <UniformeRecibido
+              inventario={inventario}
+              puedeEditar={!soloLectura}
+              varias={unidadesVisibles.length > 1}
+            />
+          )}
         </>
       )}
 
@@ -427,17 +551,11 @@ export default function Uniformidad() {
         <>
           {cargandoUniformidad && <p className="nota">Cargando pedidos…</p>}
           {!cargandoUniformidad && datosUniformidad && (
-            <>
-              <p className="nota">
-                Cada elemento con sus uniformes: cuánto se ha pagado de cada pieza, si ya se
-                entregó y quién aún debe. Toca un elemento para ver sus pedidos y sus pagos.
-              </p>
-              <RelacionPorElemento
-                grupos={datosUniformidad.grupos}
-                pedidosPorId={datosUniformidad.pedidosPorId}
-                elementosPorId={datosUniformidad.elementosPorId}
-              />
-            </>
+            <RelacionPorElemento
+              grupos={datosUniformidad.grupos}
+              pedidosPorId={datosUniformidad.pedidosPorId}
+              elementosPorId={datosUniformidad.elementosPorId}
+            />
           )}
         </>
       )}
@@ -446,13 +564,15 @@ export default function Uniformidad() {
         <>
           {cargandoUniformidad && <p className="nota">Cargando pedidos…</p>}
           {!cargandoUniformidad && datosUniformidad && (
-            <>
-              <p className="nota">Piezas con cambio por resolver, de todos los días.</p>
-              <CambiosPendientes cambios={datosUniformidad.cambios} />
-            </>
+            <CambiosPendientes
+              cambios={datosUniformidad.cambios}
+              pedidosPorId={datosUniformidad.pedidosPorId}
+              elementosPorId={datosUniformidad.elementosPorId}
+            />
           )}
         </>
       )}
+
     </div>
   );
 }

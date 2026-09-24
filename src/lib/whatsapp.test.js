@@ -4,6 +4,7 @@ import {
   mensajeComprobante,
   mensajeEntrega,
   mensajeCambioPendiente,
+  mensajeCambioResuelto,
   normalizarTelefono,
   telefonoValido,
   mensajeRelacionDia,
@@ -153,9 +154,9 @@ describe("mensajeRelacionDia", () => {
         "",
         "Detalles (Uniformidad):",
         "",
-        "1. ($680) Camisa Blanca (14 - 16) -> 8 piezas",
-        "2. ($255) Camisa Blanca (M A) -> 3 piezas",
-        "3. ($170) Fajilla (Ch) -> 1 pieza",
+        "1. ($680) Camisa Blanca (14 - 16) - Piezas 8",
+        "2. ($255) Camisa Blanca (M A) - Piezas 3",
+        "3. ($170) Fajilla (Ch) - Piezas 1",
         "",
         "Detalles (Mensualidades):",
         "",
@@ -176,7 +177,7 @@ describe("mensajeRelacionDia", () => {
         mensualidades: [],
       },
     });
-    expect(msg).toContain("1. ($90) Playera Negra (M) -> 2 piezas");
+    expect(msg).toContain("1. ($90) Playera Negra (M) - Piezas 2");
     expect(msg).not.toContain("Mensualidades");
     expect(msg.endsWith("Total: $90")).toBe(true);
   });
@@ -191,7 +192,7 @@ describe("mensajeRelacionDia", () => {
         mensualidades: [],
       },
     });
-    expect(msg).toContain("1. ($40) Corbata -> 1 pieza");
+    expect(msg).toContain("1. ($40) Corbata - Piezas 1");
   });
 
   it("sin movimientos avisa que no hubo pagos", () => {
@@ -200,5 +201,50 @@ describe("mensajeRelacionDia", () => {
       resumen: { total: 0, movimientos: 0, general: [], mensualidades: [] },
     });
     expect(msg).toBe("Relación de pagos\nHoy\n\nSin pagos registrados este día.");
+  });
+});
+
+describe("mensajes de cambio de talla/color", () => {
+  it("al pedir un cambio menciona la pieza nueva y el motivo", () => {
+    const m = mensajeCambioPendiente({
+      nombre: "Ana",
+      articulo: "Pantalón — talla 30",
+      pendiente: true,
+      motivo: "Talla equivocada",
+      nueva: "Pantalón — talla 32",
+    });
+    expect(m).toContain("Pantalón — talla 30");
+    expect(m).toContain('por "Pantalón — talla 32"');
+    expect(m).toContain("Talla equivocada");
+  });
+
+  it("sin pieza nueva conserva el mensaje anterior", () => {
+    const m = mensajeCambioPendiente({ nombre: "Ana", articulo: "Gorra", pendiente: true });
+    expect(m).toContain("CAMBIO PENDIENTE");
+    expect(m).not.toContain(" por ");
+  });
+
+  it("al resolver con entrega dice qué se entregó y quién", () => {
+    const m = mensajeCambioResuelto({
+      nombre: "Ana",
+      anterior: "Playera — talla M",
+      nueva: "Playera — talla G",
+      entregada: true,
+      quienEntrego: "Luis",
+    });
+    expect(m).toContain("se te entregó");
+    expect(m).toContain("Playera — talla G");
+    expect(m).toContain("Entregó: Luis");
+  });
+
+  it("al resolver sin entregar aún no promete entrega", () => {
+    const m = mensajeCambioResuelto({
+      nombre: "Ana",
+      anterior: "A",
+      nueva: "B",
+      entregada: false,
+    });
+    expect(m).toContain("ajustado");
+    expect(m).not.toContain("Entregó:");
   });
 });

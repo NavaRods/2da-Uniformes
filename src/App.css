@@ -1606,3 +1606,614 @@ th {
   margin: 6px 0 0 18px;
   font-size: 13px;
 }
+
+/* --- Tarjetas tocables (Elementos, buscador de Uniformidad) --- */
+.lista-tarjetas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tarjeta-enlace {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, background 0.15s ease;
+  min-height: 64px;
+}
+
+.tarjeta-enlace:hover,
+.tarjeta-enlace:focus-visible {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.tarjeta-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tarjeta-titulo {
+  font-size: 15.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tarjeta-accion {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Texto de ayuda breve bajo un título: explica qué se puede hacer. */
+.ayuda {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+/* --- Modales: se pueden desplazar en pantallas chicas --- */
+.modal {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+
+.modal-aviso {
+  max-width: 440px;
+}
+
+.modal-acciones {
+  flex-wrap: wrap;
+}
+
+/* --- Una pieza (PedidoCard): Pago, Entrega y Cambio --- */
+.pedido-card {
+  gap: 14px;
+}
+
+.pedido-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.pedido-cabecera h3 {
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.pedido-precio {
+  white-space: nowrap;
+}
+
+.pedido-estados {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pedido-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.pedido-seccion h4,
+.subformulario h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pedido-seccion p {
+  margin: 0;
+}
+
+.fila-formulario {
+  display: flex;
+  gap: 8px;
+}
+
+.fila-formulario input {
+  flex: 1;
+}
+
+.acciones-fila {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.acciones-fila button {
+  flex: 1 1 140px;
+}
+
+.subformulario {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.cambio-de-a {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+}
+
+.resumen-automatico {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+.resumen-automatico ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.nota-alerta {
+  color: var(--danger);
+  margin: 0;
+}
+
+.btn-eliminar {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  align-self: flex-start;
+}
+
+/* --- Uniformidad / Relación de pagos: nuevos elementos de interfaz --- */
+.tabs + .ayuda,
+.filtros + .ayuda {
+  margin-top: 12px;
+}
+
+.filtros-titulo {
+  margin: 14px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.relacion-acciones {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 14px 12px;
+}
+
+.relacion-acciones .btn-small {
+  margin-left: auto;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.selector-elemento {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.buscador-grande {
+  font-size: 16px;
+  padding: 14px 16px;
+}
+
+.tarjeta-boton {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.pasos {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  margin: 4px 0 12px;
+  padding: 0;
+}
+
+.pasos li {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 6px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pasos li.actual {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.pasos li.hecho {
+  color: var(--success);
+}
+
+.paso-numero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 11px;
+}
+
+.etiqueta-grupo {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.segmentos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.segmentos button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 8px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.segmentos button small {
+  font-weight: 500;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.segmentos button.activo {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.carrito {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.carrito-item > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.enlace-secundario {
+  margin: 24px 0 0;
+}
+
+.enlace-secundario a {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.tarjeta-cambio {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.tarjeta-cambio-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tarjeta-cambio p {
+  margin: 0;
+}
+
+/* --- Teléfono: resúmenes más compactos y nombre de venta legible --- */
+.venta-elemento > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.venta-elemento strong {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .tarjetas-resumen {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 8px;
+  }
+
+  .tarjetas-resumen .card {
+    padding: 12px;
+  }
+
+  .tarjetas-resumen .tarjeta-total {
+    padding: 14px 16px;
+  }
+
+  .tarjetas-resumen .total-sub {
+    font-size: 22px;
+  }
+
+  .tarjetas-resumen .total-monto {
+    font-size: 30px;
+  }
+
+  .tarjetas-resumen .nota {
+    font-size: 11.5px;
+    line-height: 1.3;
+  }
+
+  .tarjetas-resumen .ficha-etiqueta {
+    font-size: 11px;
+  }
+}
+
+/* Enlaces con apariencia de botón (p. ej. "Ver perfil"). */
+a.btn-secondary,
+a.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+}
+
+a.btn-secondary {
+  color: var(--text);
+  border: 1.5px solid var(--border);
+}
+
+a.btn-secondary:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.boton-volver {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 0;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* Inicio en teléfono: dos columnas, para ver todas las secciones de un vistazo. */
+@media (max-width: 560px) {
+  .inicio-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .inicio-card {
+    padding: 16px 14px;
+    gap: 4px;
+  }
+
+  .inicio-icono {
+    font-size: 28px;
+  }
+
+  .inicio-titulo {
+    font-size: 15px;
+  }
+
+  .inicio-detalle {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+}
+
+/* --- Asistencia: botones directos en lugar de un desplegable por persona --- */
+.asistencia-controles > * {
+  flex: 1 1 100%;
+}
+
+@media (min-width: 561px) {
+  .asistencia-controles > * {
+    flex: 1 1 200px;
+  }
+}
+
+.asistencia-row-botones {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.asistencia-nombre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-weight: 600;
+}
+
+.asistencia-estados {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) auto;
+  gap: 6px;
+}
+
+.estado-boton {
+  padding: 10px 6px;
+  font-size: 13px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.estado-boton.activo.estado-boton-asistencia {
+  background: var(--success);
+  border-color: var(--success);
+  color: var(--primary-contrast);
+}
+
+.estado-boton.activo.estado-boton-falta {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--primary-contrast);
+}
+
+.estado-boton.activo.estado-boton-justificada {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-contrast);
+}
+
+.estado-boton-baja {
+  color: var(--text-muted);
+  font-weight: 500;
+  padding-inline: 10px;
+}
+
+/* Separación uniforme entre el selector de Unidad y lo que sigue. */
+.page > .campo {
+  margin-bottom: 12px;
+}
+
+/* Perfil del elemento en teléfono: resúmenes compactos para que las pestañas
+   (Uniformes, Cuotas, Información) queden a la vista sin desplazarse tanto. */
+@media (max-width: 560px) {
+  .resumenes .card {
+    padding: 14px;
+    margin: 8px 0;
+  }
+
+  .resumenes .ficha {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+  }
+
+  .resumenes .ficha-valor {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .resumenes .ficha-etiqueta {
+    font-size: 11px;
+  }
+}
+
+/* --- Relación de pagos: relaciones validadas --- */
+.relacion-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+}
+
+.relacion-titulo,
+.relacion-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.relacion-datos {
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.subtitulo {
+  margin: 24px 0 8px;
+}
+
+/* Con varias pestañas (Uniformes y Mensualidades) se desplazan en vez de encimarse. */
+.tabs {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  flex: 1 0 auto;
+  white-space: nowrap;
+}

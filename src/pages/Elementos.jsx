@@ -3,19 +3,24 @@ import { Link } from "react-router-dom";
 import { useElementos, useUnidades } from "../lib/fuentes";
 import { estaActivo } from "../lib/elementos";
 import { useAuth } from "../auth/AuthContext";
+import { useDesde, useEstadoPersistente } from "../lib/navegacion";
 import { veTodasLasUnidades, esSoloLectura } from "../lib/roles";
 import FormElemento from "../components/FormElemento";
 import ListaBajas from "../components/ListaBajas";
 
 export default function Elementos() {
-  const { perfil } = useAuth();
+  const { user, perfil } = useAuth();
   const puedeElegirUnidad = veTodasLasUnidades(perfil);
   const soloLectura = esSoloLectura(perfil);
+  const desde = useDesde();
+  // Lo elegido se recuerda al volver de un perfil (por usuario: en una misma
+  // pestaña pueden entrar personas distintas).
+  const [unidadElegida, setUnidad] = useEstadoPersistente(`${user?.email}:elementos:unidad`, "");
   // Responsable/Instructor traen su Unidad precargada y fija; el resto elige.
-  const [unidad, setUnidad] = useState(puedeElegirUnidad ? "" : perfil?.unidad || "");
+  const unidad = puedeElegirUnidad ? unidadElegida : perfil?.unidad || "";
   const [busqueda, setBusqueda] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
-  const [vista, setVista] = useState("activos"); // activos | bajas
+  const [vista, setVista] = useEstadoPersistente(`${user?.email}:elementos:vista`, "activos"); // activos | bajas
 
   const unidades = useUnidades(puedeElegirUnidad);
   // Sin Unidad elegida (roles que ven todas) no se carga nada: así no se leen
@@ -77,6 +82,13 @@ export default function Elementos() {
         ))}
       </div>
 
+      {vista === "activos" && activos.length > 0 && (
+        <p className="ayuda">
+          Toca un elemento para abrir su <strong>perfil</strong>: datos, uniformes, pagos y
+          mensualidades.
+        </p>
+      )}
+
       <input
         className="buscador"
         placeholder="Buscar elemento..."
@@ -85,16 +97,25 @@ export default function Elementos() {
       />
 
       {vista === "activos" && (
-        <ul className="lista">
+        <ul className="lista-tarjetas">
           {activos.map((el) => (
             <li key={el.id}>
-              <Link to={`/elementos/${el.id}`} state={{ unidad: el.unidad }} className="fila-lista">
-                <span>{el.nombre}</span>
-                <span className="etiquetas">
-                  {el.gradoMilitar && <span className="tag">{el.gradoMilitar}</span>}
-                  <span className="tag">{el.grupo}</span>
-                  {el.pagaMensualidad && <span className="tag" title="Paga mensualidad">💳</span>}
-                  {el.pagaInscripcion && <span className="tag" title="Paga inscripción">🎟️</span>}
+              <Link
+                to={`/elementos/${el.id}`}
+                state={{ unidad: el.unidad, ...desde }}
+                className="tarjeta-enlace"
+              >
+                <span className="tarjeta-datos">
+                  <strong className="tarjeta-titulo">{el.nombre}</strong>
+                  <span className="etiquetas">
+                    {el.gradoMilitar && <span className="tag">{el.gradoMilitar}</span>}
+                    <span className="tag">{el.grupo}</span>
+                    {el.pagaMensualidad && <span className="tag">💳 Mensualidad</span>}
+                    {el.pagaInscripcion && <span className="tag">🎟️ Inscripción</span>}
+                  </span>
+                </span>
+                <span className="tarjeta-accion">
+                  Ver perfil <span aria-hidden="true">›</span>
                 </span>
               </Link>
             </li>

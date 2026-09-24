@@ -12,6 +12,7 @@ import {
 import { CATEGORIAS, ordenarGrados } from "../lib/grados";
 import { editarProducto } from "../lib/catalogo";
 import { useCatalogo, useGradosGuardados, useUnidades } from "../lib/fuentes";
+import { useDesde } from "../lib/navegacion";
 import SeccionRespaldo from "../components/SeccionRespaldo";
 
 // Configuración (solo Admin): Unidades, grados militares, acceso al catálogo
@@ -53,6 +54,7 @@ export default function Configuracion() {
 
 function SeccionCatalogo() {
   const productos = useCatalogo();
+  const desde = useDesde();
   const [precios, setPrecios] = useState({}); // productoId -> texto en edición
   const [guardandoId, setGuardandoId] = useState(null);
   const [guardadoId, setGuardadoId] = useState(null);
@@ -127,7 +129,7 @@ function SeccionCatalogo() {
         })}
       </ul>
 
-      <Link to="/catalogo" className="btn-secondary">
+      <Link to="/catalogo" state={desde} className="btn-secondary">
         Abrir el catálogo completo
       </Link>
     </div>

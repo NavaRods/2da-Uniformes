@@ -164,7 +164,7 @@ function fuentePedidos(unidad) {
   return pedidosPorUnidad.get(unidad);
 }
 
-// Uniforme recibido de una Unidad (pocos documentos: uno por producto y talla).
+// Uniformidad disponible de una Unidad (pocos documentos: uno por producto y talla).
 function fuenteInventario(unidad) {
   if (!inventarioPorUnidad.has(unidad)) {
     inventarioPorUnidad.set(unidad, crearFuente((cb) => listenInventario(cb, unidad)));
@@ -237,7 +237,7 @@ export const usePedidosDeUnidades = (unidadesPedidas) =>
   useDeUnidades(fuentePedidos, unidadesPedidas);
 export const useInventarioDeUnidades = (unidadesPedidas) =>
   useDeUnidades(fuenteInventario, unidadesPedidas);
-// Uniforme recibido de una Unidad; [] mientras carga o sin Unidad.
+// Uniformidad disponible de una Unidad; [] mientras carga o sin Unidad.
 export const useInventario = (unidad) => useFuente(unidad ? fuenteInventario(unidad) : null);
 export const useCatalogo = () => useFuente(catalogo);
 // `activo` en false evita suscribirse (p. ej. un Operador no necesita la lista).

@@ -1,72 +1,56 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { useEstadoPersistente } from "../lib/navegacion";
 import { esAdmin, esSoloLectura, veTodasLasUnidades } from "../lib/roles";
-import {
-  useElementosDeUnidades,
-  useInventarioDeUnidades,
-  usePedidosDeUnidades,
-  useUnidades,
-} from "../lib/fuentes";
+import { useElementosDeUnidades, usePedidosDeUnidades, useUnidades } from "../lib/fuentes";
 import { filaDePedido } from "../lib/relacionPagos";
 import RelacionDelDia from "../components/RelacionDelDia";
-import UniformidadPendiente from "../components/UniformidadPendiente";
-import UniformeRecibido from "../components/UniformeRecibido";
+import RelacionGeneral from "../components/RelacionGeneral";
+import CambiosPendientes from "../components/CambiosPendientes";
 
 const SIN_UNIDADES = [];
 
 // Relación de pagos:
-//  - Del día: pagos cobrados en una fecha (abonos y mensualidades).
-//  - Pendientes: uniformidad general por entregar (piezas por producto y
-//    talla, sin datos de elementos).
-//  - Recibido: "Uniforme recibido", lo que ya llegó y espera a entregarse.
-// El detalle por elemento y los cambios pendientes están en Uniformidad.
-// Pendientes y Recibido salen de los pedidos y elementos de la Unidad,
-// sincronizados por cambios y leídos de la caché del dispositivo: abrirlos
-// cuesta unas pocas lecturas, no una por pedido ni por elemento.
+//  - Del día: lo cobrado ese día, en general (uniformes por pieza y talla,
+//    mensualidades con nombre y meses). Ahí se valida la entrega del dinero al
+//    proveedor y se manda el resumen por WhatsApp.
+//  - General: las relaciones ya validadas. Aquí se marca lo que el proveedor
+//    entrega (parcial o total), que pasa a "Uniformidad disponible" (en
+//    Uniformes y Mensualidades). También se ven los cambios pendientes.
 export default function RelacionPagos() {
-  const { perfil } = useAuth();
+  const { user, perfil } = useAuth();
   // Admin/Super Admin/Estado Mayor eligen Unidad (o todas); Responsable e
   // Instructor ven solo la suya.
   const veTodas = veTodasLasUnidades(perfil);
   const unidades = useUnidades(veTodas);
-  const [unidadElegida, setUnidadElegida] = useState(""); // "" = todas
-  const [vista, setVista] = useState("dia"); // dia | pendientes | recibido
+  // Lo elegido se recuerda al volver de un perfil (por usuario).
+  const [unidadElegida, setUnidadElegida] = useEstadoPersistente(`${user?.email}:pagos:unidad`, ""); // "" = todas
+  const [vistaGuardada, setVista] = useEstadoPersistente(`${user?.email}:pagos:vista`, "dia"); // dia | general
+  const vista = vistaGuardada === "general" ? "general" : "dia";
+  const soloLectura = esSoloLectura(perfil);
 
-  const unidadDelDia = veTodas ? unidadElegida || undefined : perfil?.unidad;
-  // Los pedidos y elementos solo se cargan fuera de "Del día".
+  const unidadActual = veTodas ? unidadElegida || undefined : perfil?.unidad;
+  // Los pedidos (para los cambios pendientes) solo se cargan en General.
   const unidadesDePedidos = useMemo(() => {
-    if (vista === "dia") return SIN_UNIDADES;
+    if (vista !== "general") return SIN_UNIDADES;
     if (!veTodas) return perfil?.unidad ? [perfil.unidad] : SIN_UNIDADES;
     return unidadElegida ? [unidadElegida] : unidades.map((u) => u.nombre);
   }, [vista, veTodas, perfil?.unidad, unidadElegida, unidades]);
 
   const pedidos = usePedidosDeUnidades(unidadesDePedidos);
   const elementos = useElementosDeUnidades(unidadesDePedidos);
-  const inventario = useInventarioDeUnidades(unidadesDePedidos);
-  // Lo recibido se registra en una sola Unidad: la propia, o la elegida.
-  const unidadEditable = esSoloLectura(perfil)
-    ? null
-    : veTodas
-      ? unidadElegida || null
-      : perfil?.unidad || null;
-  const cargando =
-    vista !== "dia" &&
-    (pedidos === null || elementos === null || inventario === null || (veTodas && !unidadElegida && unidades.length === 0));
 
-  const datos = useMemo(() => {
+  const cambios = useMemo(() => {
     if (!pedidos || !elementos) return null;
     const elementosPorId = new Map(elementos.map((e) => [e.id, e]));
-    const filas = pedidos.map((p) =>
-      filaDePedido({ ...p, elementoNombre: elementosPorId.get(p.elementoId)?.nombre || "" })
-    );
     return {
-      filas,
-      porEntregar: filas.filter((f) => f.faltaEntregar).reduce((s, f) => s + f.cantidad, 0),
+      elementosPorId,
+      pedidosPorId: new Map(pedidos.map((p) => [`${p.elementoId}/${p.id}`, p])),
+      lista: pedidos
+        .map((p) => filaDePedido({ ...p, elementoNombre: elementosPorId.get(p.elementoId)?.nombre || "" }))
+        .filter((f) => f.cambioPendiente),
     };
   }, [pedidos, elementos]);
-
-  const recibidas = (inventario || []).reduce((s, i) => s + (Number(i.cantidad) || 0), 0);
-  const cuenta = (n) => (datos && n ? ` (${n})` : "");
 
   return (
     <div className="page">
@@ -93,8 +77,7 @@ export default function RelacionPagos() {
       <div className="tabs" role="tablist">
         {[
           ["dia", "Del día"],
-          ["pendientes", `Pendientes${cuenta(datos?.porEntregar)}`],
-          ["recibido", `Recibido${cuenta(recibidas)}`],
+          ["general", `General${cambios?.lista.length ? ` (${cambios.lista.length} cambio${cambios.lista.length === 1 ? "" : "s"})` : ""}`],
         ].map(([clave, etiqueta]) => (
           <button
             key={clave}
@@ -110,28 +93,32 @@ export default function RelacionPagos() {
       </div>
 
       {vista === "dia" && (
-        <RelacionDelDia unidad={unidadDelDia} puedeConfigurarWhatsapp={esAdmin(perfil)} />
-      )}
-
-      {vista !== "dia" && cargando && <p className="nota">Cargando pedidos…</p>}
-
-      {vista === "pendientes" && !cargando && datos && (
-        <>
-          <p className="nota">
-            Uniformidad que se debe, sumada por producto y talla. Cuando te entreguen piezas, toca
-            Recibir y anota cuántas: pasan a Uniforme recibido. Al entregarle una pieza a un
-            elemento (pestaña Por elemento, en Uniformidad) se descuenta de lo recibido.
-          </p>
-          <UniformidadPendiente filas={datos.filas} inventario={inventario} unidad={unidadEditable} />
-        </>
-      )}
-
-      {vista === "recibido" && !cargando && datos && (
-        <UniformeRecibido
-          inventario={inventario}
-          puedeEditar={!esSoloLectura(perfil)}
-          varias={unidadesDePedidos.length > 1}
+        <RelacionDelDia
+          unidad={unidadActual}
+          puedeConfigurarWhatsapp={esAdmin(perfil)}
+          puedeValidar={!soloLectura}
         />
+      )}
+
+      {vista === "general" && (
+        <>
+          <RelacionGeneral unidad={unidadActual} puedeRecibir={!soloLectura} />
+
+          {cambios && cambios.lista.length > 0 && (
+            <>
+              <h2 className="subtitulo">Cambios pendientes</h2>
+              <p className="ayuda">
+                Piezas que se van a cambiar por otra talla o color. La pieza nueva cuenta como pendiente:
+                cuando llegue, regístrala como recibida y resuelve el cambio.
+              </p>
+              <CambiosPendientes
+                cambios={cambios.lista}
+                pedidosPorId={cambios.pedidosPorId}
+                elementosPorId={cambios.elementosPorId}
+              />
+            </>
+          )}
+        </>
       )}
     </div>
   );

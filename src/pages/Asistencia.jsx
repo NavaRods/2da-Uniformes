@@ -3,31 +3,40 @@ import { useElementos, useUnidades, useGrados } from "../lib/fuentes";
 import { buscar } from "../lib/busqueda";
 import { useAuth } from "../auth/AuthContext";
 import { veTodasLasUnidades, esSoloLectura } from "../lib/roles";
+import { useEstadoPersistente } from "../lib/navegacion";
 import FormElemento from "../components/FormElemento";
 import ListaBajas from "../components/ListaBajas";
 import EstadoFuerza from "../components/EstadoFuerza";
 import { comparadorPorJerarquia } from "../lib/grados";
 import { estaActivo } from "../lib/elementos";
 import {
-  ESTADOS,
   fechaLocal,
   listenAsistenciaDia,
   marcarAsistencia,
   normalizarEstado,
 } from "../lib/asistencia";
 
+// Botones de cada renglón de la lista (la baja va aparte, con confirmación).
+const OPCIONES_LISTA = [
+  ["asistencia", "Asistió"],
+  ["falta", "Faltó"],
+  ["justificada", "Justificada"],
+];
+
 export default function Asistencia() {
-  const { perfil } = useAuth();
+  const { user, perfil } = useAuth();
   const puedeElegirUnidad = veTodasLasUnidades(perfil);
   const soloLectura = esSoloLectura(perfil);
+  // Lo elegido se recuerda al volver de otra pantalla (por usuario).
+  const [unidadElegida, setUnidad] = useEstadoPersistente(`${user?.email}:asistencia:unidad`, "");
   // Responsable/Instructor traen su Unidad precargada y fija; el resto elige.
-  const [unidad, setUnidad] = useState(puedeElegirUnidad ? "" : perfil?.unidad || "");
+  const unidad = puedeElegirUnidad ? unidadElegida : perfil?.unidad || "";
   const [fecha, setFecha] = useState(fechaLocal());
   const [asistencia, setAsistencia] = useState({});
   const [busqueda, setBusqueda] = useState("");
   const [error, setError] = useState("");
   const [mostrarForm, setMostrarForm] = useState(false);
-  const [vista, setVista] = useState("lista"); // lista | fuerza | bajas
+  const [vista, setVista] = useEstadoPersistente(`${user?.email}:asistencia:vista`, "lista"); // lista | fuerza | bajas
   const grados = useGrados();
 
   const unidades = useUnidades(puedeElegirUnidad);
@@ -142,31 +151,51 @@ export default function Asistencia() {
 
           {vista === "lista" && (
           <>
+          <p className="ayuda">
+            Toca <strong>Asistió</strong>, <strong>Faltó</strong> o <strong>Justificada</strong> en cada
+            persona. Se guarda al instante. Cuando termines, abre <strong>Estado de Fuerza</strong>.
+          </p>
+          {activos.length > 0 && (
+            <p className="nota">
+              Marcados: {activos.filter((el) => normalizarEstado(asistencia[el.id])).length} de {activos.length}
+            </p>
+          )}
           <ul className="lista">
             {visibles.map((el) => {
               const estado = normalizarEstado(asistencia[el.id]);
               return (
-                <li key={el.id} className="asistencia-row">
-                  <span>
+                <li key={el.id} className="asistencia-row asistencia-row-botones">
+                  <span className="asistencia-nombre">
                     {el.nombre}
                     {el.gradoMilitar && <span className="tag">{el.gradoMilitar}</span>}
                   </span>
-                  <select
-                    value={estado}
-                    onChange={(e) => cambiar(el, e.target.value)}
-                    className={`estado estado-${estado || "sin"}`}
-                    aria-label={`Estado de ${el.nombre}`}
-                    disabled={soloLectura}
-                  >
-                    <option value="" disabled>
-                      Sin marcar
-                    </option>
-                    {ESTADOS.map(([valor, etiqueta]) => (
-                      <option key={valor} value={valor}>
+                  <div className="asistencia-estados" role="group" aria-label={`Asistencia de ${el.nombre}`}>
+                    {OPCIONES_LISTA.map(([valor, etiqueta]) => (
+                      <button
+                        key={valor}
+                        type="button"
+                        className={`estado-boton estado-boton-${valor} ${estado === valor ? "activo" : ""}`}
+                        aria-pressed={estado === valor}
+                        disabled={soloLectura}
+                        onClick={() => cambiar(el, valor)}
+                      >
                         {etiqueta}
-                      </option>
+                      </button>
                     ))}
-                  </select>
+                    {!soloLectura && (
+                      <button
+                        type="button"
+                        className="estado-boton estado-boton-baja"
+                        onClick={() => {
+                          if (confirm(`¿Dar de baja a ${el.nombre}? Dejará de aparecer en la lista y podrás reactivarlo en la pestaña Bajas.`)) {
+                            cambiar(el, "baja");
+                          }
+                        }}
+                      >
+                        Baja
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}
