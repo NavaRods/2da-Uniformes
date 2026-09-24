@@ -1551,12 +1551,14 @@ th {
   overflow-wrap: break-word;
 }
 
-.variante-fila .btn-small {
-  margin: 0;
-}
-
+.variante-fila .btn-small,
 .variante-fila .insignia-ok {
   margin-left: auto;
+}
+
+/* Toda la pieza ya llegó: se atenúa para que resalten las que faltan. */
+.variante-completa {
+  opacity: 0.6;
 }
 
 .recibir-form {

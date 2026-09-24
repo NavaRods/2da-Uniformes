@@ -23,12 +23,19 @@ const ETIQUETA_ESTADO = {
 function FilaPieza({ relacion, indice, puedeRecibir }) {
   const pieza = relacion.piezas[indice];
   const falta = faltaDeLaPieza(pieza);
+  const recibidas = Math.min(pieza.recibido || 0, pieza.cantidad);
+  // El formulario se abre solo al tocar "Recibir": con todas las piezas
+  // abiertas a la vez la tarjeta era ilegible (una caja de texto por fila).
+  const [abierta, setAbierta] = useState(false);
   const [cantidad, setCantidad] = useState(String(falta));
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
 
-  // Si lo que falta cambia (se recibió algo), la sugerencia se ajusta.
-  useEffect(() => setCantidad(String(falta)), [falta]);
+  function abrir() {
+    setCantidad(String(falta));
+    setError("");
+    setAbierta(true);
+  }
 
   async function recibir(e) {
     e.preventDefault();
@@ -36,6 +43,7 @@ function FilaPieza({ relacion, indice, puedeRecibir }) {
     setGuardando(true);
     try {
       await recibirDeRelacion(relacion, new Map([[indice, cantidad]]));
+      setAbierta(false);
     } catch (err) {
       setError(err.message || "No se pudo guardar. Inténtalo de nuevo.");
     }
@@ -43,18 +51,30 @@ function FilaPieza({ relacion, indice, puedeRecibir }) {
   }
 
   return (
-    <li>
+    <li className={falta === 0 ? "variante-completa" : ""}>
       <div className="variante-fila">
         <span className="variante-nombre">
           {nombrePieza(pieza)}
           <span className="nota">
-            {formatoMoneda(pieza.total)} · recibidas {Math.min(pieza.recibido || 0, pieza.cantidad)} de{" "}
-            {pieza.cantidad}
+            {formatoMoneda(pieza.total)} · recibidas {recibidas} de {pieza.cantidad}
           </span>
         </span>
-        {falta === 0 && <span className="insignia insignia-ok">Completo</span>}
+        {falta === 0 ? (
+          <span className="insignia insignia-ok">Completo</span>
+        ) : (
+          puedeRecibir && (
+            <button
+              type="button"
+              className="btn-secondary btn-small"
+              aria-expanded={abierta}
+              onClick={() => (abierta ? setAbierta(false) : abrir())}
+            >
+              Recibir
+            </button>
+          )
+        )}
       </div>
-      {falta > 0 && puedeRecibir && (
+      {abierta && (
         <form className="recibir-form" onSubmit={recibir}>
           <label>
             ¿Cuántas te entregaron?
@@ -66,10 +86,14 @@ function FilaPieza({ relacion, indice, puedeRecibir }) {
               step="1"
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
+              autoFocus
             />
           </label>
           <button type="submit" className="btn-primary btn-small" disabled={guardando}>
-            Recibir
+            Guardar
+          </button>
+          <button type="button" className="btn-secondary btn-small" onClick={() => setAbierta(false)}>
+            Cancelar
           </button>
           {error && <p className="error">{error}</p>}
         </form>
@@ -125,14 +149,18 @@ function TarjetaRelacion({ relacion, abierta, alternar, puedeRecibir, mostrarUni
         <>
           {relacion.piezas.length > 0 && (
             <ul className="uniformidad-variantes">
-              {relacion.piezas.map((p, i) => (
-                <FilaPieza
-                  key={`${p.productoNombre}|${p.talla}|${p.color}`}
-                  relacion={relacion}
-                  indice={i}
-                  puedeRecibir={puedeRecibir}
-                />
-              ))}
+              {/* Las que faltan primero, para no tener que buscarlas entre las ya completas. */}
+              {relacion.piezas
+                .map((p, i) => ({ p, i }))
+                .sort((a, b) => faltaDeLaPieza(b.p) - faltaDeLaPieza(a.p))
+                .map(({ p, i }) => (
+                  <FilaPieza
+                    key={`${p.productoNombre}|${p.talla}|${p.color}`}
+                    relacion={relacion}
+                    indice={i}
+                    puedeRecibir={puedeRecibir}
+                  />
+                ))}
             </ul>
           )}
           {relacion.mensualidades?.length > 0 && (
