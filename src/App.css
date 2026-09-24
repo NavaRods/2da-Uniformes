@@ -2173,7 +2173,7 @@ a.btn-secondary:hover {
 }
 
 /* --- Relación de pagos: relaciones validadas --- */
-.relacion-cabecera {
+.relacion-dia-cabecera {
   display: flex;
   align-items: center;
   justify-content: space-between;

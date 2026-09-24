@@ -3,6 +3,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useInventario } from "../lib/fuentes";
 import { claveVariante } from "../lib/relacionPagos";
 import { existenciasPorVariante } from "../lib/inventario";
+import { formatoMoneda } from "../lib/format";
 import { armarArticulo, resolverCambio } from "../lib/pedidos";
 
 // Resolver un cambio en un solo paso. Casi todo se decide solo y se muestra
@@ -30,7 +31,9 @@ export default function ResolverCambio({ elemento, pedido, onCerrar, onResuelto 
   const habiaEntregado = !!pedido.entregado;
   const esDefecto = /defecto/i.test(pedido.motivoCambio || "");
 
-  const [entregarAhora, setEntregarAhora] = useState(hayNueva);
+  // Una pieza sin liquidar no se entrega (salvo que ya estuviera entregada).
+  const puedeEntregar = pedido.saldoPendiente <= 0 || habiaEntregado;
+  const [entregarAhora, setEntregarAhora] = useState(hayNueva && puedeEntregar);
   const [devolverAnterior, setDevolverAnterior] = useState(habiaEntregado && !esDefecto);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -84,10 +87,17 @@ export default function ResolverCambio({ elemento, pedido, onCerrar, onResuelto 
           <input
             type="checkbox"
             checked={entregarAhora}
+            disabled={!puedeEntregar}
             onChange={(e) => setEntregarAhora(e.target.checked)}
           />
           Entregar ahora la pieza nueva
         </label>
+        {!puedeEntregar && (
+          <p className="nota nota-alerta">
+            Todavía debe {formatoMoneda(pedido.saldoPendiente)}: la pieza nueva se podrá entregar cuando
+            termine de pagar.
+          </p>
+        )}
         {entregarAhora && !hayNueva && (
           <p className="nota nota-alerta">
             No hay esa pieza en Uniformidad disponible: se registrará como entregada sin descontar nada.

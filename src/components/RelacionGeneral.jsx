@@ -126,7 +126,7 @@ function TarjetaRelacion({ relacion, abierta, alternar, puedeRecibir, mostrarUni
     <li className="tarjeta-cambio">
       <button
         type="button"
-        className="relacion-cabecera"
+        className="relacion-dia-cabecera"
         aria-expanded={abierta}
         onClick={alternar}
       >

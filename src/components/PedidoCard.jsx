@@ -233,10 +233,20 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
             <button type="button" className="btn-secondary" onClick={() => setConfirmarEntrega("deshacer")}>
               Deshacer entrega
             </button>
-          ) : (
+          ) : liquidado ? (
             <button type="button" className="btn-primary" onClick={() => setConfirmarEntrega("entregar")}>
               Entregar pieza
             </button>
+          ) : (
+            <>
+              <button type="button" className="btn-primary" disabled>
+                Entregar pieza
+              </button>
+              <p className="nota nota-alerta">
+                No se puede entregar hasta que termine de pagar: todavía debe{" "}
+                {formatoMoneda(pedido.saldoPendiente)}.
+              </p>
+            </>
           ))}
       </section>
 
@@ -310,11 +320,6 @@ export default function PedidoCard({ cliente: elemento, pedido }) {
                 <p>
                   Le entregas <strong>{pedido.articulo}</strong> a <strong>{elemento.nombre}</strong>.
                 </p>
-                {!liquidado && (
-                  <p className="nota nota-alerta">
-                    Todavía debe {formatoMoneda(pedido.saldoPendiente)} de esta pieza.
-                  </p>
-                )}
                 {recibidas < piezas && (
                   <p className="nota nota-alerta">
                     No hay suficiente en Uniformidad disponible (hay {recibidas}, se necesitan {piezas}).

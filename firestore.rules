@@ -348,6 +348,10 @@ service cloud.firestore {
           (pedidoValido(request.resource.data, unidadDelElemento(elementoId)) &&
             puedeEscribirUnidad(unidadDelElemento(elementoId)) &&
             pedidoSoloCambiaPermitido(resource.data, request.resource.data) &&
+            // Una pieza no se marca como entregada mientras tenga saldo.
+            (request.resource.data.get("entregado", false) != true ||
+              resource.data.get("entregado", false) == true ||
+              request.resource.data.saldoPendiente <= 0) &&
             (request.resource.data.saldoPendiente == resource.data.saldoPendiente ||
               saldoBajaPorAbono(elementoId, pedidoId, resource.data, request.resource.data)));
 

@@ -267,8 +267,21 @@ describe("pedidos: campos fijos", () => {
     await assertFails(updateDoc(pedidoRef(como(OP_A), "pedLimpio"), { articulo: "Otro", ...ahora() }));
   });
 
+  // Deja pagado el pedido sin pagos (saldo 0), sin pasar por las reglas.
+  const liquidarLimpio = () =>
+    env.withSecurityRulesDisabled((ctx) =>
+      updateDoc(pedidoRef(ctx.firestore(), "pedLimpio"), { saldoPendiente: 0 })
+    );
+
+  it("una pieza con saldo no se puede marcar como entregada", async () => {
+    const db = como(OP_A);
+    await assertFails(updateDoc(pedidoRef(db, "pedLimpio"), { entregado: true, ...ahora() }));
+    await assertFails(updateDoc(pedidoRef(db, "ped1"), { entregado: true, ...ahora() }));
+  });
+
   it("sí se puede marcar entregado y pedir un cambio", async () => {
     const db = como(OP_A);
+    await liquidarLimpio();
     await assertSucceeds(
       updateDoc(pedidoRef(db, "pedLimpio"), { entregado: true, quienEntrego: "Ana", ...ahora() })
     );
@@ -630,6 +643,9 @@ describe("uniforme recibido (inventario)", () => {
 
   it("entregar un pedido descuenta del inventario en el mismo lote", async () => {
     const db = como(OP_A);
+    await env.withSecurityRulesDisabled((ctx) =>
+      updateDoc(pedidoRef(ctx.firestore(), "pedLimpio"), { saldoPendiente: 0 })
+    );
     await setDoc(inv(db), datos());
     const lote = writeBatch(db);
     lote.update(pedidoRef(db, "pedLimpio"), { entregado: true, descontoInventario: true, ...ahora() });
