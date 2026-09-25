@@ -1,48 +1,55 @@
 import { useEffect, useState } from "react";
-import { estadoRecepcion, faltaDeLaPieza, listenRelaciones, recibirDeRelacion } from "../lib/relaciones";
-import { etiquetaDia } from "../lib/relacionPagos";
+import {
+  agruparAbonos,
+  agruparPorPieza,
+  conAbonosPendientes,
+  fechaCorta,
+  listenRelaciones,
+  recibirDeRelacion,
+} from "../lib/relaciones";
 import { formatoMoneda } from "../lib/format";
+import { buscar } from "../lib/busqueda";
 
 // [clave, botón, qué muestra]
-const FILTROS = [
-  ["todas", "Todas", "Todas las relaciones de pagos que ya validaste, la más reciente primero."],
-  ["por-recibir", "Por recibir", "Relaciones a las que todavía les faltan piezas por llegar del proveedor."],
-  ["recibidas", "Recibidas", "Relaciones cuyas piezas ya llegaron completas."],
+const VISTAS = [
+  [
+    "sin-recibir",
+    "Sin recibir",
+    "Lo que ya pagaste al proveedor (relaciones validadas) y todavía no te entrega. Cuando llegue, toca Recibir: pasa a Uniformidad disponible.",
+  ],
+  ["recibido", "Recibido", "Lo que el proveedor ya te entregó, con la fecha en que se pagó cada pieza."],
+  [
+    "abonos",
+    "Abonos",
+    "Piezas que se están pagando poco a poco: los abonos se acumulan y la pieza no se entrega ni se cuenta hasta que se liquida.",
+  ],
 ];
 
-const nombrePieza = ({ productoNombre, color, talla }) =>
-  `${productoNombre}${color ? ` ${color}` : ""}${talla ? ` (${talla})` : ""}`;
+// El producto ya es el título de la tarjeta: aquí solo talla y color.
+const etiquetaVariante = ({ talla, color }) =>
+  [talla && `Talla ${talla}`, color].filter(Boolean).join(" · ") || "Única";
 
-const ETIQUETA_ESTADO = {
-  pendiente: ["insignia-cuota", "Sin recibir"],
-  parcial: ["insignia-abono", "Recibido en parte"],
-  completo: ["insignia-ok", "Todo recibido"],
-  "sin-piezas": ["insignia-abono", "Sin piezas"],
-};
+const etiquetaPieza = ({ productoNombre, talla, color }) =>
+  [productoNombre, talla && `talla ${talla}`, color].filter(Boolean).join(" — ");
 
-function FilaPieza({ relacion, indice, puedeRecibir }) {
-  const pieza = relacion.piezas[indice];
-  const falta = faltaDeLaPieza(pieza);
-  const recibidas = Math.min(pieza.recibido || 0, pieza.cantidad);
-  // El formulario se abre solo al tocar "Recibir": con todas las piezas
-  // abiertas a la vez la tarjeta era ilegible (una caja de texto por fila).
+// ¿El texto coincide con lo buscado? (sin acentos, mayúsculas ni orden de palabras)
+const coincide = (texto, busqueda) => !busqueda.trim() || buscar([texto], busqueda).length > 0;
+
+const piezas = (n) => `${n} ${n === 1 ? "pieza" : "piezas"}`;
+
+// Una fecha de pago de una pieza. En Sin recibir se puede marcar lo recibido.
+function FilaFecha({ entrada, modo, puedeRecibir }) {
   const [abierta, setAbierta] = useState(false);
-  const [cantidad, setCantidad] = useState(String(falta));
+  const [cantidad, setCantidad] = useState("");
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
-
-  function abrir() {
-    setCantidad(String(falta));
-    setError("");
-    setAbierta(true);
-  }
 
   async function recibir(e) {
     e.preventDefault();
     setError("");
     setGuardando(true);
     try {
-      await recibirDeRelacion(relacion, new Map([[indice, cantidad]]));
+      await recibirDeRelacion(entrada.relacion, new Map([[entrada.indice, cantidad]]));
       setAbierta(false);
     } catch (err) {
       setError(err.message || "No se pudo guardar. Inténtalo de nuevo.");
@@ -51,29 +58,31 @@ function FilaPieza({ relacion, indice, puedeRecibir }) {
   }
 
   return (
-    <li className={falta === 0 ? "variante-completa" : ""}>
-      <div className="variante-fila">
-        <span className="variante-nombre">
-          {nombrePieza(pieza)}
-          <span className="nota">
-            {formatoMoneda(pieza.total)} · recibidas {recibidas} de {pieza.cantidad}
-          </span>
+    <li>
+      <div className="rg-fila">
+        <span className="rg-fecha">
+          <span className="nota">Se pagó el</span>
+          <strong>{fechaCorta(entrada.fecha)}</strong>
         </span>
-        {falta === 0 ? (
-          <span className="insignia insignia-ok">Completo</span>
-        ) : (
-          puedeRecibir && (
-            <button
-              type="button"
-              className="btn-secondary btn-small"
-              aria-expanded={abierta}
-              onClick={() => (abierta ? setAbierta(false) : abrir())}
-            >
-              Recibir
-            </button>
-          )
+        <span className="rg-cantidad">{piezas(entrada.cantidad)}</span>
+        {modo === "sin-recibir" && puedeRecibir && (
+          <button
+            type="button"
+            className="btn-secondary btn-small"
+            aria-expanded={abierta}
+            onClick={() => {
+              setCantidad(String(entrada.cantidad));
+              setError("");
+              setAbierta(!abierta);
+            }}
+          >
+            Recibir
+          </button>
         )}
       </div>
+      {entrada.elementos?.length > 0 && (
+        <p className="nota rg-de">De: {entrada.elementos.map((e) => e.nombre).join(", ")}</p>
+      )}
       {abierta && (
         <form className="recibir-form" onSubmit={recibir}>
           <label>
@@ -82,7 +91,7 @@ function FilaPieza({ relacion, indice, puedeRecibir }) {
               type="number"
               inputMode="numeric"
               min="1"
-              max={falta}
+              max={entrada.cantidad}
               step="1"
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
@@ -102,9 +111,7 @@ function FilaPieza({ relacion, indice, puedeRecibir }) {
   );
 }
 
-function TarjetaRelacion({ relacion, abierta, alternar, puedeRecibir, mostrarUnidad }) {
-  const recepcion = estadoRecepcion(relacion.piezas);
-  const [claseEstado, textoEstado] = ETIQUETA_ESTADO[recepcion.estado];
+function BloqueVariante({ variante, modo, puedeRecibir, mostrarUnidad }) {
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
 
@@ -112,10 +119,10 @@ function TarjetaRelacion({ relacion, abierta, alternar, puedeRecibir, mostrarUni
     setError("");
     setGuardando(true);
     try {
-      const todo = new Map(
-        relacion.piezas.map((p, i) => [i, faltaDeLaPieza(p)]).filter(([, n]) => n > 0)
-      );
-      await recibirDeRelacion(relacion, todo);
+      // Una escritura por relación (cada fecha es un documento distinto).
+      for (const f of variante.fechas) {
+        await recibirDeRelacion(f.relacion, new Map([[f.indice, f.cantidad]]));
+      }
     } catch (err) {
       setError(err.message || "No se pudo guardar. Inténtalo de nuevo.");
     }
@@ -123,87 +130,70 @@ function TarjetaRelacion({ relacion, abierta, alternar, puedeRecibir, mostrarUni
   }
 
   return (
-    <li className="tarjeta-cambio">
-      <button
-        type="button"
-        className="relacion-dia-cabecera"
-        aria-expanded={abierta}
-        onClick={alternar}
-      >
-        <span className="relacion-titulo">
-          <strong>{etiquetaDia(relacion.fecha)}</strong>
-          {mostrarUnidad && <span className="nota">Unidad {relacion.unidad}</span>}
+    <li className="rg-variante">
+      <div className="rg-variante-cab">
+        <span className="rg-variante-nombre">
+          {etiquetaVariante(variante)}
+          {mostrarUnidad && <span className="nota">Unidad {variante.unidad}</span>}
         </span>
-        <span className="relacion-datos">
-          <strong>{formatoMoneda(relacion.total)}</strong>
-          <span className={`insignia ${claseEstado}`}>{textoEstado}</span>
+        <span className="rg-total">
+          {variante.fechas.length === 0 ? "Solo abonos" : `Total: ${variante.total}`}
         </span>
-      </button>
-      <p className="nota">
-        💵 Dinero entregado
-        {relacion.entregadoPor ? ` (validó ${relacion.entregadoPor})` : ""}
-        {recepcion.esperadas > 0 && ` · 📦 ${recepcion.recibidas} de ${recepcion.esperadas} piezas recibidas`}
-      </p>
-
-      {abierta && (
-        <>
-          {relacion.piezas.length > 0 && (
-            <ul className="uniformidad-variantes">
-              {/* Las que faltan primero, para no tener que buscarlas entre las ya completas. */}
-              {relacion.piezas
-                .map((p, i) => ({ p, i }))
-                .sort((a, b) => faltaDeLaPieza(b.p) - faltaDeLaPieza(a.p))
-                .map(({ p, i }) => (
-                  <FilaPieza
-                    key={`${p.productoNombre}|${p.talla}|${p.color}`}
-                    relacion={relacion}
-                    indice={i}
-                    puedeRecibir={puedeRecibir}
-                  />
-                ))}
-            </ul>
-          )}
-          {relacion.mensualidades?.length > 0 && (
-            <>
-              <p className="filtros-titulo">Mensualidades de ese día</p>
-              <ul className="uniformidad-variantes">
-                {relacion.mensualidades.map((m) => (
-                  <li key={m.nombre}>
-                    <div className="variante-fila">
-                      <span className="variante-nombre">
-                        {m.nombre}
-                        <span className="nota">{m.meses.join(", ")}</span>
-                      </span>
-                      <strong>{formatoMoneda(m.monto)}</strong>
-                    </div>
+      </div>
+      <ul className="rg-fechas">
+        {variante.fechas.map((f) => (
+          <FilaFecha key={`${f.relacion.unidad}~${f.fecha}`} entrada={f} modo={modo} puedeRecibir={puedeRecibir} />
+        ))}
+      </ul>
+      {variante.abonos?.length > 0 && (
+        <div className="rg-abonos">
+          <p className="rg-abonos-titulo">Abonos — aún sin liquidar</p>
+          {variante.abonos.map((a) => (
+            <div key={a.id} className="rg-abono">
+              <div className="rg-abono-cab">
+                <strong>{a.nombre || "?"}</strong>
+                <span className="insignia insignia-abono">
+                  {a.saldo > 0 ? `Le resta ${formatoMoneda(a.saldo)}` : "Abonando"}
+                </span>
+              </div>
+              <ul className="rg-fechas">
+                {a.pagos.map((pago, i) => (
+                  <li key={`${pago.fecha}-${i}`} className="rg-fila rg-fila-abono">
+                    <span>
+                      <span className="nota">Abono del </span>
+                      <strong>{fechaCorta(pago.fecha)}</strong>
+                    </span>
+                    <strong>{formatoMoneda(pago.monto)}</strong>
                   </li>
                 ))}
               </ul>
-            </>
-          )}
-          {error && <p className="error">{error}</p>}
-          {puedeRecibir && recepcion.faltan > 0 && (
-            <button type="button" className="btn-primary" onClick={recibirTodo} disabled={guardando}>
-              {guardando ? "Guardando…" : `Recibir todo lo que falta (${recepcion.faltan})`}
-            </button>
-          )}
-        </>
+              <p className="nota rg-de">Abonado en total = {formatoMoneda(a.total)}</p>
+            </div>
+          ))}
+        </div>
       )}
+      {modo === "sin-recibir" && puedeRecibir && variante.fechas.length > 1 && (
+        <button type="button" className="btn-secondary btn-small rg-todas" onClick={recibirTodo} disabled={guardando}>
+          {guardando ? "Guardando…" : `Recibir las ${variante.total}`}
+        </button>
+      )}
+      {error && <p className="error">{error}</p>}
     </li>
   );
 }
 
-// Relación General: todas las relaciones de pagos que ya se validaron (una
-// por día). Aquí se marca lo que el proveedor va entregando, en parte o
-// completo; esas piezas pasan a "Uniformidad disponible" (en Uniformes y
-// Mensualidades), de donde se descuentan al entregarlas a cada elemento.
+// Relación General: lo de todas las relaciones de pagos validadas, junto por
+// pieza (producto, talla y color) pero conservando la fecha en que se pagó
+// cada una. Se divide en Sin recibir (falta que el proveedor lo entregue) y
+// Recibido; al recibir, la pieza pasa a "Uniformidad disponible" (en Uniformes
+// y Mensualidades), de donde se descuenta al entregarla a cada elemento.
 // `unidad` vacío = todas las Unidades visibles. `puedeRecibir`: false en solo
-// lectura o si no se eligió una sola Unidad.
+// lectura.
 export default function RelacionGeneral({ unidad, puedeRecibir }) {
   const [relaciones, setRelaciones] = useState(null);
   const [error, setError] = useState("");
-  const [filtro, setFiltro] = useState("todas");
-  const [abierta, setAbierta] = useState("");
+  const [vista, setVista] = useState("sin-recibir");
+  const [busqueda, setBusqueda] = useState("");
 
   useEffect(() => {
     setRelaciones(null);
@@ -213,22 +203,28 @@ export default function RelacionGeneral({ unidad, puedeRecibir }) {
     );
   }, [unidad]);
 
-  const visibles = (relaciones || []).filter((r) => {
-    const { estado } = estadoRecepcion(r.piezas);
-    if (filtro === "por-recibir") return estado === "pendiente" || estado === "parcial";
-    if (filtro === "recibidas") return estado === "completo" || estado === "sin-piezas";
-    return true;
-  });
-  const faltan = (relaciones || []).reduce((s, r) => s + estadoRecepcion(r.piezas).faltan, 0);
+  const sinRecibir = conAbonosPendientes(agruparPorPieza(relaciones, "sin-recibir"), relaciones);
+  const recibido = agruparPorPieza(relaciones, "recibido");
+  const abonos = agruparAbonos(relaciones);
+  const abonosPendientes = abonos.filter((a) => !a.liquidadaEl).length;
+  // Sin recibir y Recibido se buscan por uniforme; Abonos, por uniforme o elemento.
+  const porUniforme = (lista) =>
+    lista
+      .map((p) => ({
+        ...p,
+        variantes: p.variantes.filter((v) =>
+          coincide(`${v.productoNombre} ${v.talla} ${v.color}`, busqueda)
+        ),
+      }))
+      .filter((p) => p.variantes.length > 0);
+  const grupos = porUniforme(vista === "sin-recibir" ? sinRecibir : recibido);
+  const abonosVisibles = abonos.filter((a) =>
+    coincide(`${a.nombre} ${a.productoNombre} ${a.talla} ${a.color}`, busqueda)
+  );
+  const suma = (lista) => lista.reduce((s, p) => s + p.total, 0);
 
   return (
     <>
-      <p className="ayuda">
-        Aquí están las relaciones de pagos que ya validaste (una por día). Cuando el proveedor te
-        entregue uniformes, abre la relación y toca <strong>Recibir</strong>: pasan a{" "}
-        <strong>Uniformidad disponible</strong>.
-      </p>
-
       {error && <p className="error">{error}</p>}
       {!error && relaciones === null && <p className="nota">Cargando relaciones…</p>}
 
@@ -236,32 +232,32 @@ export default function RelacionGeneral({ unidad, puedeRecibir }) {
         <>
           <div className="tarjetas-resumen">
             <div className="card tarjeta-total">
-              <span className="ficha-etiqueta">Piezas por recibir</span>
-              <span className="total-monto">{faltan}</span>
+              <span className="ficha-etiqueta">Sin recibir</span>
+              <span className="total-monto">{suma(sinRecibir)}</span>
               <span className="nota">del proveedor</span>
             </div>
             <div className="card">
-              <span className="ficha-etiqueta">Relaciones</span>
-              <span className="total-sub">{relaciones.length}</span>
-              <span className="nota">validadas</span>
+              <span className="ficha-etiqueta">Recibido</span>
+              <span className="total-sub">{suma(recibido)}</span>
+              <span className="nota">ya entregado</span>
             </div>
           </div>
 
-          <p className="filtros-titulo">¿Cuáles quieres ver?</p>
           <div className="filtros">
-            {FILTROS.map(([clave, etiqueta]) => (
+            {VISTAS.map(([clave, etiqueta]) => (
               <button
                 key={clave}
                 type="button"
-                className={`chip ${filtro === clave ? "activo" : ""}`}
-                aria-pressed={filtro === clave}
-                onClick={() => setFiltro(clave)}
+                className={`chip ${vista === clave ? "activo" : ""}`}
+                aria-pressed={vista === clave}
+                onClick={() => setVista(clave)}
               >
-                {etiqueta}
+                {etiqueta} (
+                {clave === "abonos" ? abonosPendientes : suma(clave === "sin-recibir" ? sinRecibir : recibido)})
               </button>
             ))}
           </div>
-          <p className="ayuda">{FILTROS.find(([clave]) => clave === filtro)[2]}</p>
+          <p className="ayuda">{VISTAS.find(([clave]) => clave === vista)[2]}</p>
 
           {relaciones.length === 0 && (
             <p className="nota">
@@ -269,25 +265,88 @@ export default function RelacionGeneral({ unidad, puedeRecibir }) {
               dinero” para guardar la de un día.
             </p>
           )}
-          {relaciones.length > 0 && visibles.length === 0 && (
-            <p className="nota">Ninguna relación coincide con el filtro.</p>
+          {relaciones.length > 0 && (
+            <input
+              type="search"
+              className="buscador"
+              placeholder={vista === "abonos" ? "Buscar uniforme o elemento…" : "Buscar uniforme…"}
+              aria-label="Buscar"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+          )}
+          {vista === "abonos" && relaciones.length > 0 && abonos.length === 0 && (
+            <p className="nota">No hay abonos en las relaciones validadas.</p>
+          )}
+          {vista === "abonos" && abonos.length > 0 && abonosVisibles.length === 0 && (
+            <p className="nota">Ningún abono coincide con la búsqueda.</p>
+          )}
+          {vista === "abonos" && (
+            <ul className="lista-tarjetas">
+              {abonosVisibles.map((a) => (
+                <li key={a.id} className="tarjeta-cambio">
+                  <div className="tarjeta-cambio-cabecera">
+                    <strong>{a.nombre || "?"}</strong>
+                    {a.liquidadaEl ? (
+                      <span className="insignia insignia-ok">Liquidada el {fechaCorta(a.liquidadaEl)}</span>
+                    ) : (
+                      <span className="insignia insignia-abono">
+                        {a.saldo > 0 ? `Le resta ${formatoMoneda(a.saldo)}` : "Abonando"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="nota">{etiquetaPieza(a)}</p>
+                  <ul className="rg-fechas">
+                    {a.pagos.map((pago, i) => (
+                      <li key={`${pago.fecha}-${i}`}>
+                        <div className="rg-fila rg-fila-abono">
+                          <span className="rg-fecha">
+                            <span className="nota">Abono del</span>
+                            <strong>{fechaCorta(pago.fecha)}</strong>
+                          </span>
+                          <strong>{formatoMoneda(pago.monto)}</strong>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="variante-total">
+                    <strong>Abonado en total = {formatoMoneda(a.total)}</strong>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {vista !== "abonos" && relaciones.length > 0 && grupos.length === 0 && (
+            <p className="nota">
+              {busqueda.trim()
+                ? "Ningún uniforme coincide con la búsqueda."
+                : vista === "sin-recibir"
+                  ? "No falta recibir ninguna pieza."
+                  : "Todavía no has recibido piezas."}
+            </p>
           )}
 
-          <ul className="lista-tarjetas">
-            {visibles.map((r) => {
-              const clave = `${r.unidad}~${r.fecha}`;
-              return (
-                <TarjetaRelacion
-                  key={clave}
-                  relacion={r}
-                  abierta={abierta === clave}
-                  alternar={() => setAbierta(abierta === clave ? "" : clave)}
-                  puedeRecibir={puedeRecibir}
-                  mostrarUnidad={!unidad}
-                />
-              );
-            })}
-          </ul>
+          <div className="uniformidad-lista">
+            {(vista === "abonos" ? [] : grupos).map((p) => (
+              <section key={p.producto} className="uniformidad-producto">
+                <header className="uniformidad-cabecera">
+                  <span className="pago-nombre">{p.producto}</span>
+                  <strong>{p.total > 0 ? piezas(p.total) : "Solo abonos"}</strong>
+                </header>
+                <ul className="rg-variantes">
+                  {p.variantes.map((v) => (
+                    <BloqueVariante
+                      key={v.clave}
+                      variante={v}
+                      modo={vista}
+                      puedeRecibir={puedeRecibir}
+                      mostrarUnidad={!unidad}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
         </>
       )}
     </>

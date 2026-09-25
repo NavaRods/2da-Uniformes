@@ -383,9 +383,10 @@ export default function RelacionDelDia({ unidad, puedeConfigurarWhatsapp, puedeV
       </div>
 
       <div className="card">
-        <h2>Uniformes</h2>
+        <h2>Uniformes liquidados</h2>
+        <p className="nota">Piezas que se terminaron de pagar este día.</p>
         {!cargando && !error && resumen.general.length === 0 && (
-          <p className="nota">No se cobraron uniformes este día.</p>
+          <p className="nota">Ninguna pieza se terminó de pagar este día.</p>
         )}
         <ul className="pagos">
           {resumen.general.map((r) => (
@@ -394,10 +395,39 @@ export default function RelacionDelDia({ unidad, puedeConfigurarWhatsapp, puedeV
                 <span>{r.pieza || "—"}</span>
                 <span className="nota">
                   {r.cantidad} {r.cantidad === 1 ? "pieza" : "piezas"}
+                  {r.elementos?.length > 0 && ` · ${r.elementos.map((e) => e.nombre).join(", ")}`}
                 </span>
               </div>
               <div className="pago-monto">
                 <strong>{formatoMoneda(r.total)}</strong>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="card">
+        <h2>Abonos</h2>
+        <p className="nota">
+          Piezas que aún no se terminan de pagar: no se entregan ni se cuentan como pieza hasta que se
+          liquiden. Los abonos se van acumulando.
+        </p>
+        {!cargando && !error && resumen.abonos.length === 0 && (
+          <p className="nota">No hubo abonos este día.</p>
+        )}
+        <ul className="pagos">
+          {resumen.abonos.map((a) => (
+            <li key={a.pedidoId} className="pago">
+              <div className="pago-info">
+                <span>{a.nombre || "?"}</span>
+                <span className="nota">
+                  {a.pieza || "—"}
+                  {a.saldo > 0 && ` · le resta ${formatoMoneda(a.saldo)}`}
+                </span>
+              </div>
+              <div className="pago-monto">
+                <strong>{formatoMoneda(a.monto)}</strong>
+                <span className="insignia insignia-abono">Abono</span>
               </div>
             </li>
           ))}

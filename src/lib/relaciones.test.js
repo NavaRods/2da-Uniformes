@@ -121,3 +121,77 @@ describe("recibirDeRelacion", () => {
     expect(() => recibirDeRelacion(relacion, new Map([[0, 0]]))).toThrow(/Indica cuántas/);
   });
 });
+
+describe("agruparPorPieza", () => {
+  const botas = (fecha, cantidad, recibido) => ({
+    unidad: "2a",
+    fecha,
+    piezas: [{ productoNombre: "Botas", talla: "4", color: "", cantidad, total: 0, recibido }],
+  });
+  const relaciones = [botas("2026-09-13", 1, 0), botas("2026-09-06", 3, 1)];
+
+  it("junta la misma pieza de varios días y conserva cada fecha", async () => {
+    const { agruparPorPieza } = await import("./relaciones");
+    const [botasSin] = agruparPorPieza(relaciones, "sin-recibir");
+    expect(botasSin.total).toBe(3);
+    const v = botasSin.variantes[0];
+    expect(v.fechas.map((f) => [f.fecha, f.cantidad])).toEqual([
+      ["2026-09-06", 2],
+      ["2026-09-13", 1],
+    ]);
+  });
+
+  it("separa lo recibido de lo que falta", async () => {
+    const { agruparPorPieza } = await import("./relaciones");
+    const [recibido] = agruparPorPieza(relaciones, "recibido");
+    expect(recibido.total).toBe(1);
+    expect(recibido.variantes[0].fechas).toHaveLength(1);
+    expect(agruparPorPieza([botas("2026-09-06", 2, 2)], "sin-recibir")).toEqual([]);
+  });
+
+  it("fechaCorta da día/mes/año", async () => {
+    const { fechaCorta } = await import("./relaciones");
+    expect(fechaCorta("2026-09-06")).toBe("6/09/2026");
+  });
+});
+
+describe("agruparAbonos", () => {
+  it("acumula los abonos de cada pieza y detecta cuándo se liquidó", async () => {
+    const { agruparAbonos } = await import("./relaciones");
+    const ab = (monto, saldo, pedidoId = "p1", nombre = "Ana") => ({
+      nombre, pedidoId, elementoId: "e1", productoNombre: "Botas", talla: "7", color: "", monto, saldo,
+    });
+    const relaciones = [
+      { unidad: "2a", fecha: "2026-09-06", piezas: [], abonos: [ab(100, 150), ab(50, 200, "p2", "Luis")] },
+      { unidad: "2a", fecha: "2026-09-13", piezas: [], abonos: [ab(100, 50)] },
+      {
+        unidad: "2a",
+        fecha: "2026-09-20",
+        piezas: [{ elementos: [{ pedidoId: "p1", nombre: "Ana" }] }],
+        abonos: [],
+      },
+    ];
+    const [luis, ana] = agruparAbonos(relaciones);
+    expect(luis).toMatchObject({ nombre: "Luis", total: 50, saldo: 200, liquidadaEl: null });
+    expect(ana).toMatchObject({ nombre: "Ana", total: 200, saldo: 50, liquidadaEl: "2026-09-20" });
+    expect(ana.pagos.map((p) => p.fecha)).toEqual(["2026-09-06", "2026-09-13"]);
+  });
+});
+
+describe("conAbonosPendientes", () => {
+  it("suma a Sin recibir los abonos sin liquidar, aunque la pieza aún no cuente", async () => {
+    const { conAbonosPendientes, agruparPorPieza } = await import("./relaciones");
+    const relaciones = [
+      {
+        unidad: "2a",
+        fecha: "2026-09-24",
+        piezas: [],
+        abonos: [{ nombre: "Alexa", pedidoId: "p9", elementoId: "e9", productoNombre: "Botas", talla: "5", color: "", monto: 90, saldo: 330 }],
+      },
+    ];
+    const grupos = conAbonosPendientes(agruparPorPieza(relaciones, "sin-recibir"), relaciones);
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].total).toBe(0);
+    expect(grupos[0].variantes[0].abonos[0]).toMatchObject({ nombre: "Alexa", total: 90, saldo: 330 });
+  });
+});

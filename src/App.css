@@ -2219,3 +2219,124 @@ a.btn-secondary:hover {
   flex: 1 0 auto;
   white-space: nowrap;
 }
+
+.variante-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+/* --- Relación General: piezas por producto, talla y fecha --- */
+.rg-variantes,
+.rg-fechas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rg-variantes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.rg-variante {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.rg-variante-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rg-variante-nombre {
+  gap: 3px;
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+}
+
+.rg-total {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rg-fila {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.rg-fechas li + li .rg-fila {
+  border-top: 1px dashed var(--border);
+}
+
+.rg-fecha {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rg-cantidad {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.rg-todas {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.rg-fila-abono {
+  grid-template-columns: 1fr auto;
+}
+
+.rg-fecha {
+  gap: 2px;
+}
+
+.rg-de {
+  margin: 0 0 8px;
+}
+
+.rg-abonos {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.rg-abonos-titulo {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.rg-abono + .rg-abono {
+  margin-top: 10px;
+}
+
+.rg-abono-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rg-abono .rg-fila {
+  padding: 4px 0;
+}

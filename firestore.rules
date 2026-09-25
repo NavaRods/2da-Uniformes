@@ -526,7 +526,7 @@ service cloud.firestore {
     function relacionValida(datos) {
       return datos.keys().hasOnly([
         "unidad", "fecha", "total", "totalUniformes", "totalMensualidades",
-        "mesesCobrados", "piezas", "mensualidades", "entregadoPor",
+        "mesesCobrados", "piezas", "mensualidades", "abonos", "totalAbonos", "entregadoPor",
         "entregadoEn", "actualizadoEn"
       ]) &&
       datos.unidad is string && datos.unidad.size() > 0 &&
@@ -534,6 +534,7 @@ service cloud.firestore {
       datos.total is number &&
       datos.piezas is list &&
       datos.mensualidades is list &&
+      (!("abonos" in datos) || datos.abonos is list) &&
       datos.actualizadoEn == request.time;
     }
 

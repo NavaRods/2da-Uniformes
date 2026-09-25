@@ -113,6 +113,13 @@ export function mensajeRelacionDia({ fechaEtiqueta, resumen }) {
     partes.push(`Detalles (Mensualidades):\n\n${lineas.join("\n")}`);
   }
 
+  if (resumen.abonos?.length > 0) {
+    const lineas = resumen.abonos.map(
+      (a, i) => `${i + 1}. (${pesos(a.monto)}) ${a.nombre} -> ${nombrePieza(a)}${a.saldo > 0 ? ` (resta ${pesos(a.saldo)})` : ""}`
+    );
+    partes.push(`Abonos (piezas aún sin liquidar):\n\n${lineas.join("\n")}`);
+  }
+
   partes.push(`Total: ${pesos(resumen.total)}`);
   return partes.join("\n\n");
 }

@@ -759,6 +759,13 @@ describe("relaciones de pagos validadas", () => {
     await assertFails(updateDoc(rel(db), { fecha: "2026-09-21", ...ahora() }));
   });
 
+  it("guarda los abonos del día como lista", async () => {
+    const db = como(OP_A);
+    const abono = { nombre: "Ana", pedidoId: "p1", monto: 100, saldo: 150 };
+    await assertSucceeds(setDoc(rel(db), datos({ abonos: [abono], totalAbonos: 100 })));
+    await assertFails(setDoc(rel(db), datos({ abonos: "no" })));
+  });
+
   it("no acepta campos ajenos y solo un Admin la borra", async () => {
     const db = como(OP_A);
     await assertFails(setDoc(rel(db), datos({ extra: 1 })));

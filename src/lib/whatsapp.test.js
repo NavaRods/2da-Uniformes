@@ -182,6 +182,21 @@ describe("mensajeRelacionDia", () => {
     expect(msg.endsWith("Total: $90")).toBe(true);
   });
 
+  it("lista los abonos aparte, con el nombre y lo que resta", () => {
+    const msg = mensajeRelacionDia({
+      fechaEtiqueta: "hoy",
+      resumen: {
+        total: 100,
+        movimientos: 1,
+        general: [],
+        mensualidades: [],
+        abonos: [{ nombre: "Ana Pérez", monto: 100, productoNombre: "Botas", talla: "7", color: "", saldo: 150 }],
+      },
+    });
+    expect(msg).toContain("Abonos (piezas aún sin liquidar):");
+    expect(msg).toContain("1. ($100) Ana Pérez -> Botas (7) (resta $150)");
+  });
+
   it("piezas sin talla salen sin paréntesis", () => {
     const msg = mensajeRelacionDia({
       fechaEtiqueta: "hoy",

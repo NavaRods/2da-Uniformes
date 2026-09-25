@@ -89,6 +89,39 @@ describe("resumenDia", () => {
     expect(general[0]).toMatchObject({ productoNombre: "Playera", talla: "M", color: "Negra" });
   });
 
+  it("separa los abonos: la pieza solo cuenta cuando se liquida, y dice de quién es", () => {
+    const f = (id, pedidoId, nombre, monto, etiqueta, saldo) => ({
+      id, pedidoId, elementoId: `e-${nombre}`, elementoNombre: nombre, tipo: "uniforme",
+      productoNombre: "Botas", talla: "7", color: "", monto, etiqueta, saldo,
+    });
+    const r = resumenDia([
+      f("1", "p1", "Ana", 100, "Abono", 150),
+      f("2", "p2", "Luis", 250, "Liquidado", 0),
+      f("3", "p3", "Eva", 50, "Abono", 200),
+      f("4", "p3", "Eva", 30, "Abono", 170),
+    ]);
+    expect(r.general).toHaveLength(1);
+    expect(r.general[0]).toMatchObject({ cantidad: 1, total: 250 });
+    expect(r.general[0].elementos.map((e) => e.nombre)).toEqual(["Luis"]);
+    expect(r.abonos.map((a) => [a.nombre, a.monto, a.saldo])).toEqual([
+      ["Ana", 100, 150],
+      ["Eva", 80, 170],
+    ]);
+    expect(r.totalAbonos).toBe(180);
+    expect(r.total).toBe(430);
+  });
+
+  it("un abono del mismo día en que se liquida la pieza sigue contando como abono", () => {
+    const f = (id, monto, etiqueta, saldo) => ({
+      id, pedidoId: "p1", elementoId: "e1", elementoNombre: "Ana", tipo: "uniforme",
+      productoNombre: "Botas", talla: "7", color: "", monto, etiqueta, saldo,
+    });
+    const r = resumenDia([f("1", 100, "Abono", 150), f("2", 150, "Liquidado", 0)]);
+    expect(r.abonos.map((a) => [a.nombre, a.monto])).toEqual([["Ana", 100]]);
+    expect(r.general[0]).toMatchObject({ cantidad: 1, total: 150 });
+    expect(r.total).toBe(250);
+  });
+
   it("junta las mensualidades por elemento con sus meses en orden cronológico", () => {
     expect(resumenDia(filas).mensualidades).toEqual([
       { nombre: "Ana", monto: 60, meses: ["Dic 2025"] },

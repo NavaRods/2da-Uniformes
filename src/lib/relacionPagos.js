@@ -30,6 +30,8 @@ export function filaDeAbono(abono, pedido, elementoNombre) {
     color: pedido?.color || "",
     monto: Number(abono.monto) || 0,
     etiqueta: pedido && pedido.saldoPendiente <= 0 ? "Liquidado" : "Abono",
+    // Lo que queda por pagar de la pieza después de este abono.
+    saldo: pedido && Number.isFinite(Number(pedido.saldoPendiente)) ? Number(pedido.saldoPendiente) : null,
     horaLocal: abono.horaLocal || "",
     quienRecibio: abono.quienRecibio || "",
   };
@@ -62,26 +64,64 @@ export function resumenDia(filas) {
   const mensualidades = filas.filter((f) => f.tipo === "mensualidad");
   const suma = (lista) => lista.reduce((s, f) => s + f.monto, 0);
 
-  // Relación General: piezas por producto/talla/color. Una pieza es un pedido,
-  // así que dos abonos al mismo pedido el mismo día cuentan una sola pieza,
-  // aunque sí suman su dinero.
-  const porPieza = {};
+  // Una pieza es un pedido. Los abonos (pagos que no terminan de pagar la
+  // pieza) se quedan siempre en Abonos, con su elemento y lo que aún resta,
+  // aunque después se liquide: su dinero también se entrega, pero la pieza
+  // no se cuenta ni se entrega hasta liquidarse. El pago que sí la termina de
+  // pagar cuenta la pieza en el general (por producto, talla y color, con los
+  // elementos a quienes pertenece).
+  const porPedido = new Map();
   for (const f of uniformes) {
-    const clave = [f.productoNombre, f.talla, f.color].filter(Boolean).join(" — ");
+    const id = f.pedidoId ?? f.id;
+    if (!porPedido.has(id)) {
+      porPedido.set(id, { ...f, pedidoId: id, monto: 0, montoAbono: 0, liquidado: false, saldo: null });
+    }
+    const p = porPedido.get(id);
+    if (f.etiqueta === "Abono") {
+      p.montoAbono += f.monto;
+      if (f.saldo != null) p.saldo = p.saldo == null ? f.saldo : Math.min(p.saldo, f.saldo);
+    } else {
+      p.monto += f.monto;
+      p.liquidado = true;
+    }
+  }
+  const porPieza = {};
+  const abonos = [];
+  for (const p of porPedido.values()) {
+    if (p.montoAbono > 0) {
+      abonos.push({
+        elementoId: p.elementoId,
+        pedidoId: p.pedidoId,
+        nombre: p.elementoNombre,
+        pieza: [p.productoNombre, p.talla, p.color].filter(Boolean).join(" — "),
+        productoNombre: p.productoNombre,
+        talla: p.talla,
+        color: p.color,
+        monto: p.montoAbono,
+        saldo: p.saldo,
+      });
+    }
+    if (!p.liquidado) continue;
+    const clave = [p.productoNombre, p.talla, p.color].filter(Boolean).join(" — ");
     porPieza[clave] ??= {
       pieza: clave,
-      productoNombre: f.productoNombre,
-      talla: f.talla,
-      color: f.color,
-      pedidos: new Set(),
+      productoNombre: p.productoNombre,
+      talla: p.talla,
+      color: p.color,
+      cantidad: 0,
       total: 0,
+      elementos: [],
     };
-    porPieza[clave].pedidos.add(f.pedidoId ?? f.id);
-    porPieza[clave].total += f.monto;
+    porPieza[clave].cantidad += 1;
+    porPieza[clave].total += p.monto;
+    porPieza[clave].elementos.push({
+      elementoId: p.elementoId,
+      pedidoId: p.pedidoId,
+      nombre: p.elementoNombre,
+    });
   }
-  const general = Object.values(porPieza)
-    .map(({ pedidos, ...resto }) => ({ ...resto, cantidad: pedidos.size }))
-    .sort((a, b) => b.total - a.total);
+  const general = Object.values(porPieza).sort((a, b) => b.total - a.total);
+  abonos.sort((a, b) => (a.nombre || "").localeCompare(b.nombre || "", "es"));
 
   // Mensualidades: una entrada por elemento (si pagó varias veces el mismo
   // día se juntan), con sus meses en orden cronológico.
@@ -104,6 +144,8 @@ export function resumenDia(filas) {
     movimientos: filas.length,
     totalUniformes: suma(uniformes),
     totalMensualidades: suma(mensualidades),
+    totalAbonos: abonos.reduce((s, a) => s + a.monto, 0),
+    abonos,
     mesesCobrados: mensualidades.reduce((s, f) => s + f.cantidadMeses, 0),
     general,
     mensualidades: detalleMensualidades,
