@@ -774,3 +774,28 @@ describe("relaciones de pagos validadas", () => {
     await assertSucceeds(deleteDoc(rel(como(ADMIN))));
   });
 });
+
+// Cuentas de correo y contraseña sin verificar: aunque su correo esté dado de
+// alta en usuarios, no leen ni escriben nada hasta abrir el enlace de
+// verificación (si no, cualquiera podría registrarse con el correo de otro).
+describe("correo sin verificar", () => {
+  const sinVerificar = (correo) =>
+    env.authenticatedContext(correo, { email: correo, email_verified: false }).firestore();
+
+  it("un Admin dado de alta pero sin verificar no lee ni escribe datos", async () => {
+    const db = sinVerificar(ADMIN);
+    await assertFails(getDoc(doc(db, "elementos", "el1")));
+    await assertFails(getDoc(doc(db, "catalogo", "x")));
+    await assertFails(setDoc(doc(db, "elementos", "nuevo"), elementoA));
+    await assertFails(setDoc(doc(db, "usuarios", "otro@club.mx"), { rol: "admin", unidad: null }));
+  });
+
+  it("un Responsable sin verificar no ve los pedidos de su Unidad", async () => {
+    await assertFails(getDoc(pedidoRef(sinVerificar(OP_A), "pedLimpio")));
+    await assertSucceeds(getDoc(pedidoRef(como(OP_A), "pedLimpio")));
+  });
+
+  it("la misma cuenta, ya verificada, sí entra", async () => {
+    await assertSucceeds(getDoc(doc(como(ADMIN), "elementos", "el1")));
+  });
+});

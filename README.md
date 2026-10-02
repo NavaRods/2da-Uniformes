@@ -9,7 +9,7 @@ guardan localmente y se sincronizan solos cuando vuelve la conexión
 
 - Node.js 20+
 - Un proyecto de Firebase (gratis, plan Spark) con Firestore y Authentication
-  (Google) activados.
+  (Google y Correo/contraseña) activados.
 
 ## Configuración
 
@@ -66,6 +66,23 @@ Abre `http://localhost:5173`, inicia sesión con el correo que usaste en
 `seed:emulator` — el emulador de Auth deja crear esa cuenta de prueba en el
 momento, sin que sea una cuenta real de Google. La consola del emulador
 (`http://localhost:4000`) deja ver y editar los datos a mano.
+
+### Acceso con correo y contraseña
+
+Además de Google, se puede entrar con cualquier correo y contraseña. Una sola
+vez, en la consola de Firebase: Authentication > Sign-in method > Correo
+electrónico/contraseña > Habilitar (sin activar "Vínculo del correo").
+
+- Un Admin da de alta el correo en "Usuarios" (con su rol y Unidad); solo esa
+  persona entra, con Google o con correo y contraseña.
+- Quien crea su cuenta con contraseña recibe un correo de verificación y no ve
+  la app hasta abrir el enlace: las reglas de Firestore exigen el correo
+  verificado (así nadie se registra con un correo ajeno ya autorizado).
+- "Olvidé mi contraseña" manda el enlace para crear una nueva.
+- En el emulador, `seed:pruebas` crea las cuentas de prueba ya verificadas
+  (la contraseña es `CONTRASENA_PRUEBA` en `scripts/datos-prueba-emulador.mjs`).
+  Los correos de verificación y de recuperación no se envían: sus enlaces
+  aparecen en la terminal del emulador y en su panel (Authentication).
 
 `npm run emulators` guarda los datos en `./.emulator-data` al cerrarlo
 (`--export-on-exit`) y los recarga la próxima vez, así no hay que sembrar cada
@@ -210,8 +227,9 @@ que se hizo ese respaldo y una confirmación; cada lote deja registro en
   activa "Aplicar" (enforce) para Cloud Firestore.
 - **Consola de Firebase / Google Cloud** (no se puede hacer desde el código):
   restringir la API key por referrer HTTP, dejar solo tus dominios en
-  Authentication > Configuración > Dominios autorizados, dejar solo Google
-  como proveedor de acceso, y configurar alertas de presupuesto.
+  Authentication > Configuración > Dominios autorizados, dejar solo Google y
+  Correo/contraseña como proveedores de acceso, y configurar alertas de
+  presupuesto.
 
 ## Elementos, bajas, Estado de Fuerza y reportes
 

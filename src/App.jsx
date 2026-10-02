@@ -14,14 +14,17 @@ import Uniformidad from "./pages/Uniformidad";
 import Usuarios from "./pages/Usuarios";
 import Configuracion from "./pages/Configuracion";
 import EstadoConexion from "./components/EstadoConexion";
+import VerificarCorreo from "./components/VerificarCorreo";
 import { AvisoProvider } from "./components/AvisoProvider";
 import { esAdmin, requiereUnidad } from "./lib/roles";
 import "./App.css";
 
 function Privado({ children, soloAdmin = false }) {
-  const { user, perfil, loading, logout } = useAuth();
+  const { user, perfil, verificado, loading, logout } = useAuth();
   if (loading) return <p className="page">Cargando...</p>;
   if (!user) return <Navigate to="/login" replace />;
+  // Cuenta de correo y contraseña que aún no abre su enlace de verificación.
+  if (!verificado) return <VerificarCorreo />;
   if (!perfil) {
     return (
       <div className="page">

@@ -12,15 +12,22 @@
 //   npm run seed:pruebas
 
 process.env.FIRESTORE_EMULATOR_HOST = "127.0.0.1:8080";
+process.env.FIREBASE_AUTH_EMULATOR_HOST = "127.0.0.1:9099";
 
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import { GRADOS_PREDETERMINADOS } from "../src/lib/grados.js";
 import { TURNOS, FUENTES } from "../src/lib/opciones.js";
 
 const PROJECT_ID = "da-unidad-6c88d";
 initializeApp({ projectId: PROJECT_ID });
 const db = getFirestore();
+const auth = getAuth();
+
+// Contraseña de las cuentas de prueba (solo existe en el emulador de Auth): con
+// ella se entra con correo y contraseña sin pasar por el correo de verificación.
+const CONTRASENA_PRUEBA = "prueba-uniformes-1";
 
 const UNIDADES = ["1a", "2a", "3a"];
 const ELEMENTOS_POR_UNIDAD = { "1a": 38, "2a": 34, "3a": 30 };
@@ -137,6 +144,23 @@ async function main() {
     usuario(`instructor.${u}@prueba.test`, "instructor", u, `Instructor ${u}`);
   }
 
+  // Cuentas en el emulador de Auth, ya verificadas, para entrar con correo y
+  // contraseña. Si ya existen, se les restablece la contraseña.
+  const correosDePrueba = [
+    "admin@prueba.test",
+    "estadomayor@prueba.test",
+    ...UNIDADES.flatMap((u) => [`responsable.${u}@prueba.test`, `instructor.${u}@prueba.test`]),
+  ];
+  for (const email of correosDePrueba) {
+    const datos = { email, password: CONTRASENA_PRUEBA, emailVerified: true };
+    try {
+      await auth.createUser(datos);
+    } catch (err) {
+      if (err.code !== "auth/email-already-exists") throw err;
+      await auth.updateUser((await auth.getUserByEmail(email)).uid, datos);
+    }
+  }
+
   const sinPedidos = [];
   UNIDADES.forEach((unidad, iUnidad) => {
     const activos = [];
@@ -211,7 +235,8 @@ async function main() {
   for (const [coleccion, n] of Object.entries(cuenta)) console.log(`  ${coleccion}: ${n}`);
   console.log(`  (elementos sin ningún pedido: ${sinPedidos.length})`);
   console.log("");
-  console.log("Usuarios para probar permisos (inicia sesión con el correo en el emulador de Auth):");
+  console.log("Usuarios para probar permisos (correo y contraseña; la contraseña es");
+  console.log("CONTRASENA_PRUEBA, al inicio de scripts/datos-prueba-emulador.mjs):");
   console.log("  admin@prueba.test, estadomayor@prueba.test,");
   console.log("  responsable.1a@prueba.test, instructor.1a@prueba.test (igual para 2a y 3a)");
 }

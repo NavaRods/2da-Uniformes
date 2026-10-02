@@ -610,6 +610,57 @@ th {
   font-size: 26px;
 }
 
+.login-titulo {
+  font-size: 18px;
+  margin: 16px 0 4px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  text-align: left;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.login-form .error,
+.login-form .success-msg {
+  margin: 0;
+  display: block;
+}
+
+.login-enlaces {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+/* Botón con aspecto de enlace (acciones secundarias). */
+.enlace {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--primary);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.login-separador {
+  color: var(--text-muted);
+  margin: 18px 0 10px;
+}
+
 .error {
   color: var(--danger);
   background: var(--danger-soft);
