@@ -1,12 +1,8 @@
 import { describe, it, expect } from "vitest";
-import {
-  LARGO_MINIMO_CONTRASENA,
-  mensajeErrorAuth,
-  validarCredenciales,
-} from "./autenticacion";
+import { mensajeErrorAuth, validarCredenciales } from "./autenticacion";
 
 describe("validarCredenciales", () => {
-  it("acepta un correo válido con contraseña (iniciar sesión)", () => {
+  it("acepta un correo válido con contraseña", () => {
     expect(validarCredenciales({ correo: "ana@club.mx", contrasena: "x" })).toBe("");
   });
 
@@ -23,29 +19,6 @@ describe("validarCredenciales", () => {
   it("pide la contraseña", () => {
     expect(validarCredenciales({ correo: "ana@club.mx", contrasena: "" })).toMatch(/contraseña/);
   });
-
-  describe("al crear cuenta (con confirmación)", () => {
-    const base = { correo: "ana@club.mx" };
-
-    it("exige el largo mínimo", () => {
-      const corta = "a".repeat(LARGO_MINIMO_CONTRASENA - 1);
-      expect(validarCredenciales({ ...base, contrasena: corta, confirmacion: corta })).toMatch(
-        new RegExp(String(LARGO_MINIMO_CONTRASENA))
-      );
-    });
-
-    it("exige que coincidan", () => {
-      expect(
-        validarCredenciales({ ...base, contrasena: "12345678", confirmacion: "12345679" })
-      ).toMatch(/no coinciden/);
-    });
-
-    it("acepta contraseñas largas que coinciden", () => {
-      expect(
-        validarCredenciales({ ...base, contrasena: "12345678", confirmacion: "12345678" })
-      ).toBe("");
-    });
-  });
 });
 
 describe("mensajeErrorAuth", () => {
@@ -55,10 +28,6 @@ describe("mensajeErrorAuth", () => {
     const c = mensajeErrorAuth({ code: "auth/invalid-credential" });
     expect(a).toBe(b);
     expect(b).toBe(c);
-  });
-
-  it("explica un correo que ya tiene cuenta", () => {
-    expect(mensajeErrorAuth({ code: "auth/email-already-in-use" })).toMatch(/ya tiene cuenta/);
   });
 
   it("avisa cuando no hay conexión", () => {

@@ -598,50 +598,324 @@ th {
   gap: 10px;
 }
 
-/* --- Login --- */
-.login-screen {
-  padding: 72px 16px;
-  text-align: center;
-  max-width: 400px;
-  margin: 0 auto;
+/* --- Acceso (iniciar sesión, verificar correo) --- */
+.acceso {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
 }
 
-.login-screen h1 {
-  font-size: 26px;
-}
-
-.login-titulo {
-  font-size: 18px;
-  margin: 16px 0 4px;
-}
-
-.login-form {
+.acceso-marca {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 48px 56px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(99, 102, 241, 0.55), transparent 46%),
+    radial-gradient(circle at 92% 96%, rgba(13, 148, 136, 0.5), transparent 42%),
+    var(--bg-nav);
+}
+
+.acceso-logo {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  margin-top: 16px;
-  text-align: left;
 }
 
-.login-form label {
+.acceso-logo-icono {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(4px);
+}
+
+.acceso-logo-nombre {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.acceso-mensaje h1 {
+  margin: 0 0 14px;
+  font-size: clamp(28px, 3.2vw, 40px);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.acceso-mensaje p {
+  margin: 0;
+  max-width: 440px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.acceso-puntos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  font-size: 14.5px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.acceso-puntos li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.acceso-puntos li::before {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(45, 212, 191, 0.22);
+  color: #5eead4;
+}
+
+.acceso-panel {
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background: var(--bg);
+}
+
+.acceso-tarjeta {
+  width: 100%;
+  max-width: 420px;
+  padding: 32px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .acceso-tarjeta {
+    animation: acceso-entrada 0.35s ease both;
+  }
+}
+
+@keyframes acceso-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.acceso-titulo {
+  margin: 0 0 6px;
+  font-size: 24px;
+  letter-spacing: -0.01em;
+}
+
+.acceso-ayuda {
+  margin: 0 0 22px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.acceso-form {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
+  gap: 16px;
 }
 
-.login-form .error,
-.login-form .success-msg {
-  margin: 0;
+.acceso-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.acceso-campo input {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.acceso-entrada {
+  position: relative;
   display: block;
 }
 
-.login-enlaces {
+.acceso-entrada input {
+  padding-left: 42px;
+}
+
+.acceso-icono {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  transform: translateY(-50%);
+  display: grid;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.acceso-entrada:focus-within .acceso-icono {
+  color: var(--primary);
+}
+
+/* Ojo para mostrar u ocultar la contraseña. */
+.acceso-ver {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 8px;
+}
+
+.acceso-ver:hover {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.acceso-ver:active {
+  transform: translateY(-50%) scale(0.96);
+}
+
+.acceso-entrada:has(.acceso-ver) input {
+  padding-right: 48px;
+}
+
+.acceso-olvide {
+  align-self: flex-end;
+  margin-top: -8px;
+}
+
+.acceso-volver {
+  align-self: center;
+  margin-top: 18px;
+}
+
+.acceso-boton {
+  padding: 12px 18px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+
+.acceso-mensaje-error,
+.acceso-mensaje-ok {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.acceso-mensaje-error {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.acceso-mensaje-ok {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.acceso-form .acceso-mensaje-error,
+.acceso-form .acceso-mensaje-ok {
+  margin: 0;
+}
+
+.acceso-separador {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 14px;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 16px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.acceso-separador::before,
+.acceso-separador::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.acceso-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 18px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+}
+
+.acceso-google:hover:not(:disabled) {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.acceso-sobre {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+  font-size: 26px;
+  border-radius: 16px;
+  background: var(--primary-soft);
+}
+
+/* Celular y pantallas angostas: una sola columna, con la marca como encabezado. */
+@media (max-width: 860px) {
+  .acceso {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .acceso-marca {
+    padding: 22px 20px 56px;
+    gap: 0;
+  }
+
+  .acceso-mensaje,
+  .acceso-puntos {
+    display: none;
+  }
+
+  .acceso-panel {
+    padding: 0 16px 32px;
+    align-items: start;
+  }
+
+  .acceso-tarjeta {
+    margin-top: -36px;
+    padding: 24px 20px;
+  }
 }
 
 /* Botón con aspecto de enlace (acciones secundarias). */
@@ -654,11 +928,6 @@ th {
   font-size: 14px;
   cursor: pointer;
   text-decoration: underline;
-}
-
-.login-separador {
-  color: var(--text-muted);
-  margin: 18px 0 10px;
 }
 
 .error {

@@ -69,16 +69,24 @@ momento, sin que sea una cuenta real de Google. La consola del emulador
 
 ### Acceso con correo y contraseña
 
-Además de Google, se puede entrar con cualquier correo y contraseña. Una sola
-vez, en la consola de Firebase: Authentication > Sign-in method > Correo
-electrónico/contraseña > Habilitar (sin activar "Vínculo del correo").
+Además de Google, se puede entrar con cualquier correo y contraseña. **Nadie se
+registra solo**: la pantalla de acceso no tiene "Crear cuenta", y el acceso lo
+da el Super Admin. Para dar de alta a alguien:
 
-- Un Admin da de alta el correo en "Usuarios" (con su rol y Unidad); solo esa
-  persona entra, con Google o con correo y contraseña.
-- Quien crea su cuenta con contraseña recibe un correo de verificación y no ve
-  la app hasta abrir el enlace: las reglas de Firestore exigen el correo
-  verificado (así nadie se registra con un correo ajeno ya autorizado).
-- "Olvidé mi contraseña" manda el enlace para crear una nueva.
+1. En la consola de Firebase > Authentication > Users > Agregar usuario: su
+   correo y una contraseña temporal. (Una sola vez, activa "Correo
+   electrónico/contraseña" en Authentication > Sign-in method, sin "Vínculo
+   del correo".)
+2. En "Usuarios" de la app, darlo de alta con su rol y Unidad.
+3. La persona entra con esos datos. Las cuentas creadas en la consola nacen sin
+   verificar: en su primer acceso ve "Verifica tu correo", toca "Reenviar
+   correo" y abre el enlace. Después puede cambiar su contraseña con "Olvidé
+   mi contraseña".
+
+Sin la verificación del correo las reglas de Firestore no dejan leer ni
+escribir nada (así nadie entra con un correo ajeno), y sin su entrada en
+"Usuarios" tampoco hay acceso aunque exista la cuenta.
+
 - En el emulador, `seed:pruebas` crea las cuentas de prueba ya verificadas
   (la contraseña es `CONTRASENA_PRUEBA` en `scripts/datos-prueba-emulador.mjs`).
   Los correos de verificación y de recuperación no se envían: sus enlaces
@@ -101,6 +109,20 @@ npm run preview
 
 El resultado en `dist/` es una PWA instalable (se puede alojar gratis en
 Firebase Hosting, Vercel o Netlify).
+
+## TypeScript
+
+El proyecto se está pasando a TypeScript poco a poco: los archivos `.js`/`.jsx`
+siguen funcionando igual y los nuevos (o los que se vayan migrando) se escriben
+en `.ts`/`.tsx`. Vite y Vitest los leen sin configurar nada más.
+
+- `npm run typecheck` revisa los tipos (`tsc --noEmit`; no genera archivos).
+  `npm run deploy` lo corre antes de compilar.
+- Los `.ts`/`.tsx` se revisan en modo estricto; los `.js` no se revisan
+  (`checkJs` apagado) hasta que se migren. Para migrar un archivo: renombrarlo
+  con `git mv` y agregarle tipos; los imports no cambian (sin extensión).
+- Las pruebas también pueden ser `.test.ts`. Ya están migrados
+  `src/lib/autenticacion.ts` y su prueba.
 
 ## Pruebas
 

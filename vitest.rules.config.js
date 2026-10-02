@@ -5,7 +5,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["rules-tests/**/*.test.js"],
+    include: ["rules-tests/**/*.test.{js,ts}"],
     // Un solo archivo a la vez: comparten el mismo emulador.
     fileParallelism: false,
     testTimeout: 20000,

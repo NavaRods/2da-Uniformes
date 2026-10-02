@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import {
-  createUserWithEmailAndPassword,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
@@ -13,7 +12,7 @@ import { listenUsuario } from "../lib/usuarios";
 import { reiniciarFuentes } from "../lib/fuentes";
 import { mensajeErrorAuth } from "../lib/autenticacion";
 
-const AuthContext = createContext(null);
+const AuthContext = createContext(/** @type {any} */ (null));
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -74,24 +73,14 @@ export function AuthProvider({ children }) {
     }
   }
 
-  // Correo y contraseña. Las tres lanzan un Error con el mensaje ya en español
-  // para que la pantalla de acceso lo muestre junto al formulario.
+  // Correo y contraseña. Las cuentas no se crean desde la app: el Super Admin
+  // las da de alta (consola de Firebase) junto con su entrada en Usuarios.
+  // Estas funciones lanzan un Error con el mensaje ya en español para que la
+  // pantalla de acceso lo muestre junto al formulario.
   async function loginConCorreo(correo, contrasena) {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, correo.trim(), contrasena);
-    } catch (e) {
-      throw new Error(mensajeErrorAuth(e));
-    }
-  }
-
-  // Crea la cuenta y manda el correo de verificación. La sesión queda abierta
-  // (sin verificar) y la app muestra la pantalla "Verifica tu correo".
-  async function registrarConCorreo(correo, contrasena) {
-    setError(null);
-    try {
-      const { user: nuevo } = await createUserWithEmailAndPassword(auth, correo.trim(), contrasena);
-      await sendEmailVerification(nuevo);
     } catch (e) {
       throw new Error(mensajeErrorAuth(e));
     }
@@ -144,7 +133,6 @@ export function AuthProvider({ children }) {
         error,
         login,
         loginConCorreo,
-        registrarConCorreo,
         recuperarContrasena,
         reenviarVerificacion,
         revisarVerificacion,

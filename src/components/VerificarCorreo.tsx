@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import AccesoLayout from "./AccesoLayout";
+
+const mensajeDe = (e: unknown, alternativo: string) => (e instanceof Error ? e.message : alternativo);
 
 // Pantalla para quien creó su cuenta con correo y contraseña y aún no abre el
 // enlace de verificación. Mientras tanto no se carga nada de la app (las
@@ -18,7 +21,7 @@ export default function VerificarCorreo() {
       await reenviarVerificacion();
       setMensaje("Te mandamos otro correo. Revisa también la carpeta de spam.");
     } catch (e) {
-      setError(e.message);
+      setError(mensajeDe(e, "No se pudo reenviar el correo."));
     }
     setOcupado(false);
   }
@@ -37,25 +40,32 @@ export default function VerificarCorreo() {
   }
 
   return (
-    <div className="login-screen">
-      <h1>Verifica tu correo</h1>
-      <p>
-        Te mandamos un enlace a <strong>{user?.email}</strong>. Ábrelo para activar tu cuenta y
-        luego toca “Ya verifiqué mi correo”.
+    <AccesoLayout>
+      <div className="acceso-sobre" aria-hidden="true">
+        ✉️
+      </div>
+      <h2 className="acceso-titulo">Verifica tu correo</h2>
+      <p className="acceso-ayuda">
+        Para entrar necesitas verificar <strong>{user?.email}</strong>. Si no te llegó el enlace,
+        toca “Reenviar correo”; ábrelo y luego toca “Ya verifiqué mi correo”.
       </p>
-      {error && <p className="error">{error}</p>}
-      {mensaje && <p className="success-msg">{mensaje}</p>}
-      <div className="login-form">
-        <button type="button" className="btn-primary" onClick={yaVerifique} disabled={ocupado}>
+
+      <div aria-live="polite">
+        {error && <p className="acceso-mensaje-error">{error}</p>}
+        {mensaje && <p className="acceso-mensaje-ok">{mensaje}</p>}
+      </div>
+
+      <div className="acceso-form">
+        <button type="button" className="btn-primary acceso-boton" onClick={yaVerifique} disabled={ocupado}>
           Ya verifiqué mi correo
         </button>
-        <button type="button" className="btn-secondary" onClick={reenviar} disabled={ocupado}>
+        <button type="button" className="acceso-google" onClick={reenviar} disabled={ocupado}>
           Reenviar correo
         </button>
-        <button type="button" className="enlace" onClick={logout}>
+        <button type="button" className="enlace acceso-volver" onClick={logout}>
           Cerrar sesión
         </button>
       </div>
-    </div>
+    </AccesoLayout>
   );
 }
